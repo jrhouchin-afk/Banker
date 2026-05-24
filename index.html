@@ -204,6 +204,9 @@ function holeMatchups(round,holeIdx){
 function findUnresolvedTies(round){
   const ties=[];
   for(let h=0;h<17;h++){
+    // Only check for ties once every player has a score on this hole
+    const allScored=round.scores[h].every(s=>s!==''&&s!==null&&!isNaN(parseInt(s)));
+    if(!allScored)continue;
     const nets=round.players.map((p,i)=>netScore(round.scores[h][i],p.hcp,h,round.strokeIndexes));
     const valid=nets.filter(n=>n!==null);if(valid.length<2)continue;
     const min=Math.min(...valid),tied=nets.map((n,i)=>n===min?i:-1).filter(i=>i>=0);
