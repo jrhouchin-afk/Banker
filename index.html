@@ -235,6 +235,8 @@ function computeSettlement(totals){
   return payments;
 }
 function siIsValid(si){const vals=si.map(v=>parseInt(v));return vals.every(v=>!isNaN(v)&&v>=1&&v<=18)&&new Set(vals).size===18;}
+function parIsValid(par){return par.every(v=>v!==''&&[3,4,5].includes(parseInt(v)));}
+function totalPar(par){return parIsValid(par)?par.reduce((s,v)=>s+parseInt(v),0):null;}
 function initials(n){return String(n||'').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)||'?';}
 function avatarColor(i){const c=[{bg:'#E1F5EE',color:'#085041'},{bg:'#E6F1FB',color:'#0C447C'},{bg:'#FAEEDA',color:'#633806'},{bg:'#FBEAF0',color:'#72243E'}];return c[i%c.length];}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -345,11 +347,11 @@ function renderCourses(root){
           <span class="card-title">${courses.length} course${courses.length!==1?'s':''} saved</span>
         </div>
         ${courses.map(name=>{
-          const si=state.courseDB[name].strokeIndexes,rp=state.rounds.filter(r=>r.course===name).length;
+          const si=state.courseDB[name].strokeIndexes,rp=state.rounds.filter(r=>r.course===name).length,cp=state.courseDB[name].pars;
           return`<div class="course-list-item">
             <div style="flex:1;min-width:0;">
               <div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
-              <div style="font-size:12px;color:var(--text-sec);">SI: ${si.slice(0,9).join('-')} / ${si.slice(9).join('-')}${rp?` · ${rp} round${rp!==1?'s':''} played`:''}</div>
+              <div style="font-size:12px;color:var(--text-sec);">SI: ${si.slice(0,9).join('-')} / ${si.slice(9).join('-')}${cp?' · Par '+cp.reduce((s,v)=>s+v,0):''}${rp?' · '+rp+' round'+(rp!==1?'s':'')+' played':''}</div>
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px;">
               <button class="btn btn-sm" onclick="editCourse('${esc(name)}')"><i class="ti ti-edit"></i></button>
@@ -361,13 +363,13 @@ function renderCourses(root){
 }
 
 function startAddCourse(){
-  state.editingCourse={name:'',strokeIndexes:Array(18).fill(''),isNew:true};
+  state.editingCourse={name:'',strokeIndexes:Array(18).fill(''),pars:Array(18).fill(''),isNew:true};
   liveInputs.ecName='';state.ecSuggestions=[];state.ecShowSugg=false;
   state.view='edit-course';render();
 }
 function editCourse(name){
   const db=state.courseDB[name];
-  state.editingCourse={name,strokeIndexes:[...db.strokeIndexes],isNew:false};
+  state.editingCourse={name,strokeIndexes:[...db.strokeIndexes],pars:db.pars?[...db.pars]:Array(18).fill(''),isNew:false};
   liveInputs.ecName=name;state.ecShowSugg=false;
   state.view='edit-course';render();
 }
@@ -376,10 +378,10 @@ function deleteCourse(name){
 }
 
 function renderEditCourse(root){
-  const ec=state.editingCourse,si=ec.strokeIndexes;
-  const siValid=siIsValid(si),nameOk=ec.name.trim().length>0;
+  const ec=state.editingCourse,si=ec.strokeIndexes,par=ec.pars||Array(18).fill('');
+  const siValid=siIsValid(si),parValid=parIsValid(par),nameOk=ec.name.trim().length>0;
   const nameConflict=ec.isNew&&ec.name.trim()&&state.courseDB[ec.name.trim()];
-  const canSave=nameOk&&siValid&&!nameConflict;
+  const canSave=nameOk&&siValid&&parValid&&!nameConflict;
   const vals=si.map(v=>parseInt(v)),allFilled=si.every(v=>v!==''),allInRange=vals.every(v=>v>=1&&v<=18),allUnique=new Set(vals).size===18;
   const sugg=state.ecSuggestions||[];
   root.innerHTML=`
@@ -415,10 +417,30 @@ function renderEditCourse(root){
       ${allFilled&&allInRange&&!allUnique?`<p style="font-size:12px;color:var(--red);margin-top:8px;"><i class="ti ti-alert-circle"></i> Each number 1–18 must appear exactly once.</p>`:''}
       ${siValid?`<p style="font-size:12px;color:var(--green);margin-top:8px;"><i class="ti ti-check"></i> All 18 stroke indexes valid.</p>`:''}
       <div style="margin-top:12px;border-top:0.5px solid var(--border);padding-top:12px;">
-        <div class="section-label" style="margin-bottom:6px">Quick fill</div>
+        <div class="section-label" style="margin-bottom:6px">Quick fill — Stroke Indexes</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn-sm" onclick="ecQuickFill('seq')">Sequential (1–18)</button>
           <button class="btn btn-sm" onclick="ecQuickFill('clear')">Clear all</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header" style="margin-bottom:0.5rem">
+        <span class="card-title">Par per Hole</span>
+        ${parValid?`<span class="badge badge-green"><i class="ti ti-check"></i> Total: ${totalPar(par)}</span>`:''}
+      </div>
+      <p style="font-size:13px;color:var(--text-sec);margin-bottom:1rem;">Enter 3, 4, or 5 for each hole.</p>
+      <div class="section-label" style="margin-bottom:6px">Front 9</div>
+      <div class="si-grid">${[0,1,2,3,4,5,6,7,8].map(i=>`<div class="si-cell"><label>H${i+1}</label><input class="si-input" id="par-${i}" type="number" min="3" max="5" placeholder="—" value="${par[i]!==''?par[i]:''}" oninput="ecSetPar(${i},this.value)"/></div>`).join('')}</div>
+      <div class="section-label" style="margin-bottom:6px;margin-top:12px">Back 9</div>
+      <div class="si-grid">${[9,10,11,12,13,14,15,16,17].map(i=>`<div class="si-cell"><label>H${i+1}</label><input class="si-input" id="par-${i}" type="number" min="3" max="5" placeholder="—" value="${par[i]!==''?par[i]:''}" oninput="ecSetPar(${i},this.value)"/></div>`).join('')}</div>
+      ${parValid?`<p style="font-size:12px;color:var(--green);margin-top:8px;"><i class="ti ti-check"></i> Total par: ${totalPar(par)}</p>`:`<p style="font-size:12px;color:var(--text-sec);margin-top:8px;">Each hole must be 3, 4, or 5.</p>`}
+      <div style="margin-top:12px;border-top:0.5px solid var(--border);padding-top:12px;">
+        <div class="section-label" style="margin-bottom:6px">Quick fill — Par</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-sm" onclick="ecQuickFill('par4')">All par 4</button>
+          <button class="btn btn-sm" onclick="ecQuickFill('par72')">Typical par 72</button>
+          <button class="btn btn-sm" onclick="ecQuickFill('clearpar')">Clear par</button>
         </div>
       </div>
     </div>
@@ -451,11 +473,21 @@ function updateEcDropdown(){
 function ecNameBlur(){setTimeout(()=>{state.ecShowSugg=false;updateEcDropdown();},200);}
 function ecSelectName(name){liveInputs.ecName=name;state.editingCourse.name=name;state.ecShowSugg=false;state.ecSuggestions=[];render();}
 function ecSetSI(i,v){state.editingCourse.strokeIndexes[i]=v===''?'':parseInt(v);clearTimeout(window._siT);window._siT=setTimeout(()=>render(),500);}
-function ecQuickFill(t){if(t==='clear')state.editingCourse.strokeIndexes=Array(18).fill('');else state.editingCourse.strokeIndexes=[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];render();}
+function ecSetPar(i,v){if(!state.editingCourse.pars)state.editingCourse.pars=Array(18).fill('');state.editingCourse.pars[i]=v===''?'':parseInt(v);clearTimeout(window._parT);window._parT=setTimeout(()=>render(),500);}
+function ecQuickFill(t){
+  if(t==='clear')state.editingCourse.strokeIndexes=Array(18).fill('');
+  else if(t==='seq')state.editingCourse.strokeIndexes=[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
+  else if(t==='par4'){if(!state.editingCourse.pars)state.editingCourse.pars=Array(18).fill('');state.editingCourse.pars=Array(18).fill(4);}
+  else if(t==='par72'){if(!state.editingCourse.pars)state.editingCourse.pars=Array(18).fill('');
+    // Typical par 72: 2 par-3s and 2 par-5s per 9
+    state.editingCourse.pars=[4,4,3,4,5,4,3,4,5,4,4,3,4,5,4,3,4,5];}
+  else if(t==='clearpar'){state.editingCourse.pars=Array(18).fill('');}
+  render();
+}
 function saveCourse(){
   const ec=state.editingCourse,name=ec.name.trim();
   if(!name||!siIsValid(ec.strokeIndexes))return;
-  state.courseDB[name]={strokeIndexes:ec.strokeIndexes.map(v=>parseInt(v))};
+  state.courseDB[name]={strokeIndexes:ec.strokeIndexes.map(v=>parseInt(v)),pars:ec.pars?ec.pars.map(v=>parseInt(v)):Array(18).fill(4)};
   if(state._returnToRound&&state.newRound){state.newRound.course=name;liveInputs.nrCourse=name;}
   state.editingCourse=null;state.view=state._returnToRound?'new-round':'courses';state._returnToRound=false;DB.save();render();
 }
@@ -495,7 +527,17 @@ function renderNewRound(root){
         <span style="font-size:13px;font-weight:600;color:var(--text)">Stroke Indexes</span>
         <button class="btn btn-sm" onclick="goEditCourseFromRound('${esc(nr.course)}')"><i class="ti ti-edit"></i> Edit</button>
       </div>
-      <div class="si-grid">${savedSI.map((v,i)=>`<div class="si-cell"><label>H${i+1}</label><div class="si-display">${v}</div></div>`).join('')}</div>
+      <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:4px;margin-bottom:6px;">
+        ${savedSI.map((v,i)=>`<div class="si-cell"><label>H${i+1}</label><div class="si-display">${v}</div></div>`).join('')}
+      </div>
+      ${state.courseDB[nr.course].pars?`
+        <div style="margin-top:8px;">
+          <div class="section-label" style="margin-bottom:4px">Par</div>
+          <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:4px;">
+            ${state.courseDB[nr.course].pars.map((v,i)=>`<div class="si-cell"><div class="si-display" style="background:transparent;border:0.5px solid var(--border);font-size:13px">${v}</div></div>`).join('')}
+          </div>
+          <div style="font-size:12px;color:var(--text-sec);margin-top:6px;">Total par: ${state.courseDB[nr.course].pars.reduce((s,v)=>s+v,0)}</div>
+        </div>`:''}
     </div>`:''}
     <div class="card">
       <div class="card-header">
@@ -640,7 +682,8 @@ function deletePlayer(name){
 function createRound(){
   const nr=state.newRound;if(nr.players.length<2||!nr.course)return;
   const si=state.courseDB[nr.course]?[...state.courseDB[nr.course].strokeIndexes]:null;
-  const round={id:Date.now().toString(),date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),course:nr.course,players:nr.players.map(p=>({...p})),scores:Array.from({length:18},()=>nr.players.map(()=>'')),bankers:[],initialBanker:null,tieResolution:{},doubles:Array.from({length:18},()=>null),strokeIndexes:si};
+  const pars=state.courseDB[nr.course]&&state.courseDB[nr.course].pars?[...state.courseDB[nr.course].pars]:null;
+  const round={id:Date.now().toString(),date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),course:nr.course,players:nr.players.map(p=>({...p})),scores:Array.from({length:18},()=>nr.players.map(()=>'')),bankers:[],initialBanker:null,tieResolution:{},doubles:Array.from({length:18},()=>null),strokeIndexes:si,pars};
   state.rounds.push(round);state.currentRound=round;state.flipResult=null;state.view='flip';DB.save();render();
 }
 
@@ -714,7 +757,7 @@ function renderDoublesPhase(round,h,banker,allIdxs){
     else{const w=challengers.filter(i=>challengerDoubled[i]);if(w.length)summary.push(`<span style="color:var(--green-dark);font-weight:600">${w.map(i=>esc(round.players[i].name)).join(', ')} doubled → $${BASE_BET*2}</span>`);}
   }
   return`
-    <div class="banker-announce"><i class="ti ti-star-filled" style="color:var(--amber)"></i><span>Hole ${h+1} Banker: <strong>${esc(round.players[banker].name)}</strong></span>${round.strokeIndexes?`<span style="margin-left:auto;font-size:11px;background:rgba(0,0,0,0.1);padding:2px 8px;border-radius:99px">SI ${round.strokeIndexes[h]}</span>`:''}</div>
+    <div class="banker-announce"><i class="ti ti-star-filled" style="color:var(--amber)"></i><span>Hole ${h+1} Banker: <strong>${esc(round.players[banker].name)}</strong></span><span style="margin-left:auto;display:flex;gap:6px;align-items:center">${round.pars?`<span style="font-size:11px;background:rgba(0,0,0,0.1);padding:2px 8px;border-radius:99px">Par ${round.pars[h]}</span>`:''} ${round.strokeIndexes?`<span style="font-size:11px;background:rgba(0,0,0,0.1);padding:2px 8px;border-radius:99px">SI ${round.strokeIndexes[h]}</span>`:''}</span></div>
     <div class="card">
       <div class="card-header" style="margin-bottom:0.5rem"><span class="card-title">Did anyone double?</span><span style="font-size:12px;color:var(--text-sec)">Hole ${h+1}</span></div>
       <p style="font-size:14px;color:var(--text-sec);margin-bottom:1rem;">Tap players who declared a double on the tee.</p>
@@ -739,9 +782,9 @@ function renderDoublesPhase(round,h,banker,allIdxs){
 }
 
 function renderScoresPhase(round,h,banker){
-  const doubles=round.doubles[h],summary=doublesSummary(doubles,banker,round.players),si=round.strokeIndexes;
+  const doubles=round.doubles[h],summary=doublesSummary(doubles,banker,round.players),si=round.strokeIndexes,pars=round.pars;
   return`
-    <div class="banker-announce"><i class="ti ti-star-filled" style="color:var(--amber)"></i><span>Hole ${h+1} Banker: <strong>${esc(round.players[banker].name)}</strong></span>${si?`<span style="font-size:11px;background:rgba(0,0,0,0.1);padding:2px 8px;border-radius:99px">SI ${si[h]}</span>`:''}<button class="btn btn-sm" onclick="editDoubles()" style="margin-left:auto;font-size:11px;padding:4px 8px"><i class="ti ti-arrows-exchange"></i> Doubles</button></div>
+    <div class="banker-announce"><i class="ti ti-star-filled" style="color:var(--amber)"></i><span>Hole ${h+1} Banker: <strong>${esc(round.players[banker].name)}</strong></span><span style="margin-left:auto;display:flex;gap:6px;align-items:center">${pars?`<span style="font-size:11px;background:rgba(0,0,0,0.1);padding:2px 8px;border-radius:99px">Par ${pars[h]}</span>`:''} ${si?`<span style="font-size:11px;background:rgba(0,0,0,0.1);padding:2px 8px;border-radius:99px">SI ${si[h]}</span>`:''}</span><button class="btn btn-sm" onclick="editDoubles()" style="font-size:11px;padding:4px 8px"><i class="ti ti-arrows-exchange"></i> Doubles</button></div>
     ${summary?`<div style="background:var(--gold-light);border:1px solid var(--amber);border-radius:var(--radius-md);padding:10px 14px;margin-bottom:1rem;">${summary.map(s=>`<div style="font-size:13px;color:#633806;font-weight:600">${esc(s)}</div>`).join('')}</div>`:''}
     <div class="card">
       <div class="card-header">
@@ -775,7 +818,10 @@ function renderScoresPhase(round,h,banker){
     <div class="card" style="padding:0.75rem 0.5rem;">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0.75rem;margin-bottom:0.75rem;"><span class="card-title">Full Scorecard</span><div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;">${Array.from({length:18},(_,i)=>{const has=round.scores[i].some(s=>s!==''&&s!==null),d=round.doubles[i],anyD=d&&(d.bankerDoubledGroup||Object.values(d.challengerDoubled||{}).some(Boolean));return`<button class="btn btn-sm ${i===h?'btn-primary':''}" onclick="jumpToHole(${i})" style="padding:3px 6px;font-size:11px;min-width:28px;${has&&i!==h?'border-color:var(--green);color:var(--green-dark)':''}${anyD&&i!==h?';background:var(--gold-light);border-color:var(--amber)':''}">${i+1}${anyD?'✕':''}</button>`;}).join('')}</div></div>
       <div class="score-table-wrap"><table class="score-table">
-        <thead><tr><th>Player</th>${Array.from({length:18},(_,i)=>`<th style="${i===h?'background:#633806':''}">${i+1}</th>`).join('')}<th>Tot</th></tr></thead>
+        <thead>
+          <tr><th>Player</th>${Array.from({length:18},(_,i)=>`<th style="${i===h?'background:#633806':''}">${i+1}</th>`).join('')}<th>Tot</th></tr>
+          ${pars?`<tr style="background:var(--bg-sec)"><td style="font-size:10px;color:var(--text-sec)">Par</td>${Array.from({length:18},(_,i)=>`<td style="font-size:10px;color:var(--text-sec);font-weight:600">${pars[i]}</td>`).join('')}<td style="font-size:10px;color:var(--text-sec);font-weight:600">${pars.reduce((s,v)=>s+v,0)}</td></tr>`:''}
+        </thead>
         <tbody>
           ${round.players.map((p,i)=>{const av=avatarColor(i),total=round.scores.reduce((s,hole)=>{const g=hole[i];return s+(g!==''&&g!==null&&!isNaN(parseInt(g))?parseInt(g):0);},0);return`<tr>
             <td><div style="display:flex;align-items:center;gap:5px;"><div class="player-avatar" style="background:${av.bg};color:${av.color};width:20px;height:20px;font-size:9px">${initials(p.name)}</div><span style="color:var(--text)">${esc(p.name.split(' ')[0])}</span></div></td>
