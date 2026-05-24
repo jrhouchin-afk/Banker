@@ -413,9 +413,9 @@ function renderEditCourse(root){
       <div class="si-grid">${[0,1,2,3,4,5,6,7,8].map(i=>`<div class="si-cell"><label>H${i+1}</label><input class="si-input" id="si-${i}" type="number" min="1" max="18" placeholder="—" value="${si[i]!==''?si[i]:''}" oninput="ecSetSI(${i},this.value)" onkeydown="ecSIKeydown(${i},event)"/></div>`).join('')}</div>
       <div class="section-label" style="margin-bottom:6px;margin-top:12px">Back 9</div>
       <div class="si-grid">${[9,10,11,12,13,14,15,16,17].map(i=>`<div class="si-cell"><label>H${i+1}</label><input class="si-input" id="si-${i}" type="number" min="1" max="18" placeholder="—" value="${si[i]!==''?si[i]:''}" oninput="ecSetSI(${i},this.value)" onkeydown="ecSIKeydown(${i},event)"/></div>`).join('')}</div>
-      ${allFilled&&!allInRange?`<p style="font-size:12px;color:var(--red);margin-top:8px;"><i class="ti ti-alert-circle"></i> Values must be between 1 and 18.</p>`:''}
-      ${allFilled&&allInRange&&!allUnique?`<p style="font-size:12px;color:var(--red);margin-top:8px;"><i class="ti ti-alert-circle"></i> Each number 1–18 must appear exactly once.</p>`:''}
-      ${siValid?`<p style="font-size:12px;color:var(--green);margin-top:8px;"><i class="ti ti-check"></i> All 18 stroke indexes valid.</p>`:''}
+      <p id="si-valid-msg" style="font-size:12px;margin-top:8px;color:${allFilled&&!allInRange?'var(--red)':allFilled&&allInRange&&!allUnique?'var(--red)':siValid?'var(--green)':''}">
+        ${allFilled&&!allInRange?'Values must be between 1 and 18.':allFilled&&allInRange&&!allUnique?'Each number 1–18 must appear exactly once.':siValid?'All 18 stroke indexes valid.':''}
+      </p>
       <div style="margin-top:12px;border-top:0.5px solid var(--border);padding-top:12px;">
         <div class="section-label" style="margin-bottom:6px">Quick fill — Stroke Indexes</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -427,14 +427,16 @@ function renderEditCourse(root){
     <div class="card">
       <div class="card-header" style="margin-bottom:0.5rem">
         <span class="card-title">Par per Hole</span>
-        ${parValid?`<span class="badge badge-green"><i class="ti ti-check"></i> Total: ${totalPar(par)}</span>`:''}
+        <span id="par-valid-badge">${parValid?`<span class="badge badge-green"><i class="ti ti-check"></i> Total: ${totalPar(par)}</span>`:''}</span>
       </div>
       <p style="font-size:13px;color:var(--text-sec);margin-bottom:1rem;">Enter 3, 4, or 5 for each hole.</p>
       <div class="section-label" style="margin-bottom:6px">Front 9</div>
       <div class="si-grid">${[0,1,2,3,4,5,6,7,8].map(i=>`<div class="si-cell"><label>H${i+1}</label><input class="si-input" id="par-${i}" type="number" min="3" max="5" placeholder="—" value="${par[i]!==''?par[i]:''}" oninput="ecSetPar(${i},this.value)"/></div>`).join('')}</div>
       <div class="section-label" style="margin-bottom:6px;margin-top:12px">Back 9</div>
       <div class="si-grid">${[9,10,11,12,13,14,15,16,17].map(i=>`<div class="si-cell"><label>H${i+1}</label><input class="si-input" id="par-${i}" type="number" min="3" max="5" placeholder="—" value="${par[i]!==''?par[i]:''}" oninput="ecSetPar(${i},this.value)"/></div>`).join('')}</div>
-      ${parValid?`<p style="font-size:12px;color:var(--green);margin-top:8px;"><i class="ti ti-check"></i> Total par: ${totalPar(par)}</p>`:`<p style="font-size:12px;color:var(--text-sec);margin-top:8px;">Each hole must be 3, 4, or 5.</p>`}
+      <p id="par-valid-msg" style="font-size:12px;margin-top:8px;color:${parValid?'var(--green)':'var(--text-sec)'}">
+        ${parValid?'Total par: '+totalPar(par):'Each hole must be 3, 4, or 5.'}
+      </p>
       <div style="margin-top:12px;border-top:0.5px solid var(--border);padding-top:12px;">
         <div class="section-label" style="margin-bottom:6px">Quick fill — Par</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -446,7 +448,7 @@ function renderEditCourse(root){
     </div>
     <div style="display:flex;justify-content:flex-end;gap:8px;">
       <button class="btn" onclick="cancelEditCourse()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveCourse()" ${canSave?'':'disabled'}><i class="ti ti-device-floppy"></i> Save Course</button>
+      <button id="course-save-btn" class="btn btn-primary" onclick="saveCourse()" ${canSave?'':'disabled'}><i class="ti ti-device-floppy"></i> Save Course</button>
     </div>`;
 }
 
@@ -474,7 +476,29 @@ function ecNameBlur(){setTimeout(()=>{state.ecShowSugg=false;updateEcDropdown();
 function ecSelectName(name){liveInputs.ecName=name;state.editingCourse.name=name;state.ecShowSugg=false;state.ecSuggestions=[];render();}
 function ecSetSI(i,v){
   state.editingCourse.strokeIndexes[i]=v===''?'':parseInt(v);
-  clearTimeout(window._siT);window._siT=setTimeout(()=>render(),500);
+  // Update validation badge in-place — no full re-render (kills keyboard on mobile)
+  updateSIValidation();
+}
+function updateSIValidation(){
+  const si=state.editingCourse.strokeIndexes;
+  const valid=siIsValid(si);
+  const badge=document.getElementById('si-valid-badge');
+  const msg=document.getElementById('si-valid-msg');
+  if(badge){
+    badge.innerHTML=valid?`<span class="badge badge-green"><i class="ti ti-check"></i> Valid</span>`:'';
+  }
+  if(msg){
+    const allFilled=si.every(v=>v!=='');
+    const vals=si.map(v=>parseInt(v));
+    const allInRange=vals.every(v=>v>=1&&v<=18);
+    const allUnique=new Set(vals).size===18;
+    if(valid){msg.textContent='All 18 stroke indexes valid.';msg.style.color='var(--green)';}
+    else if(allFilled&&!allInRange){msg.textContent='Values must be between 1 and 18.';msg.style.color='var(--red)';}
+    else if(allFilled&&allInRange&&!allUnique){msg.textContent='Each number 1–18 must appear exactly once.';msg.style.color='var(--red)';}
+    else{msg.textContent='';msg.style.color='';}
+  }
+  // Also refresh save button
+  updateParValidation();
 }
 // Advance to next SI cell on Tab or Enter
 function ecSIKeydown(i,e){
@@ -488,11 +512,44 @@ function ecSetPar(i,v){
   if(!state.editingCourse.pars)state.editingCourse.pars=Array(18).fill('');
   const parsed=parseInt(v);
   state.editingCourse.pars[i]=v===''?'':parsed;
+  // Auto-advance to next cell on valid entry — but do NOT re-render (kills keyboard)
   if([3,4,5].includes(parsed)&&i<17){
     const next=document.getElementById('par-'+(i+1));
     if(next){next.focus();next.select();}
   }
-  clearTimeout(window._parT);window._parT=setTimeout(()=>render(),500);
+  // Just update the validation badge/total in-place, no full re-render
+  updateParValidation();
+}
+function updateParValidation(){
+  const par=state.editingCourse.pars||[];
+  const valid=parIsValid(par);
+  const badge=document.getElementById('par-valid-badge');
+  const msg=document.getElementById('par-valid-msg');
+  if(badge){
+    if(valid){
+      badge.innerHTML=`<span class="badge badge-green"><i class="ti ti-check"></i> Total: ${totalPar(par)}</span>`;
+    } else {
+      badge.innerHTML='';
+    }
+  }
+  if(msg){
+    if(valid){
+      msg.textContent='Total par: '+totalPar(par);
+      msg.style.color='var(--green)';
+    } else {
+      msg.textContent='Each hole must be 3, 4, or 5.';
+      msg.style.color='var(--text-sec)';
+    }
+  }
+  // Also update save button disabled state
+  const saveBtn=document.getElementById('course-save-btn');
+  if(saveBtn){
+    const ec=state.editingCourse;
+    const nameOk=ec.name.trim().length>0;
+    const siValid=siIsValid(ec.strokeIndexes);
+    const nameConflict=ec.isNew&&ec.name.trim()&&state.courseDB[ec.name.trim()];
+    saveBtn.disabled=!(nameOk&&siValid&&valid&&!nameConflict);
+  }
 }
 function ecQuickFill(t){
   if(t==='clear')state.editingCourse.strokeIndexes=Array(18).fill('');
