@@ -241,18 +241,19 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 
 // ── Persistent storage using localStorage ──────────────────────────────────
 const DB={
-  save(){try{localStorage.setItem('gb_rounds',JSON.stringify(state.rounds));localStorage.setItem('gb_courses',JSON.stringify(state.courseDB));}catch(e){console.warn('Storage full',e);}},
+  save(){try{localStorage.setItem('gb_rounds',JSON.stringify(state.rounds));localStorage.setItem('gb_courses',JSON.stringify(state.courseDB));localStorage.setItem('gb_players',JSON.stringify(state.playerDB));}catch(e){console.warn('Storage full',e);}},
   load(){
     try{
       const r=localStorage.getItem('gb_rounds');if(r)state.rounds=JSON.parse(r);
       const c=localStorage.getItem('gb_courses');if(c)state.courseDB=JSON.parse(c);
+      const p=localStorage.getItem('gb_players');if(p)state.playerDB=JSON.parse(p);
     }catch(e){console.warn('Load error',e);}
   }
 };
 
 // ── State ──────────────────────────────────────────────────────────────────
 let state={
-  view:'home',rounds:[],currentRound:null,courseDB:{},
+  view:'home',rounds:[],currentRound:null,courseDB:{},playerDB:[],
   editingCourse:null,newRound:null,
   showAddPlayerForm:false,newPlayerName:'',newPlayerHcp:'',
   flipResult:null,activeHole:0,roundTab:'scorecard',
@@ -260,6 +261,7 @@ let state={
   _returnToRound:false,
   ecSuggestions:[],ecShowSugg:false,
   nrSuggestions:[],nrShowSugg:false,
+  nrPickingFromDB:false,nrPickedName:'',nrSaveNewPlayer:false,
 };
 let liveInputs={ecName:'',nrCourse:''};
 
@@ -273,6 +275,7 @@ function render(){
   else if(state.view==='flip')renderFlip(root);
   else if(state.view==='round')renderRound(root);
   else if(state.view==='settlement')renderSettlement(root);
+  else if(state.view==='players')renderPlayers(root);
   window.scrollTo(0,0);
 }
 
@@ -284,15 +287,20 @@ function renderHome(root){
       <div class="header-icon"><i class="ti ti-golf"></i></div>
       <div><h1>Banker</h1><p>Track your rounds and side bets</p></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.5rem;">
-      <button class="btn btn-primary" style="justify-content:center;padding:18px 12px;font-size:15px;flex-direction:column;gap:8px;height:auto" onclick="startNewRound()">
-        <i class="ti ti-golf" style="font-size:28px"></i>
-        Start New Round
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:1.5rem;">
+      <button class="btn btn-primary" style="justify-content:center;padding:16px 8px;font-size:14px;flex-direction:column;gap:6px;height:auto" onclick="startNewRound()">
+        <i class="ti ti-golf" style="font-size:26px"></i>
+        New Round
       </button>
-      <button class="btn" style="justify-content:center;padding:18px 12px;font-size:15px;flex-direction:column;gap:8px;height:auto;border-color:var(--green);color:var(--green-dark);background:var(--green-light)" onclick="goCourses()">
-        <i class="ti ti-map-pin" style="font-size:28px"></i>
-        Add New Course
-        ${sc>0?`<span style="font-size:11px;font-weight:600;color:var(--green-dark)">${sc} saved</span>`:''}
+      <button class="btn" style="justify-content:center;padding:16px 8px;font-size:14px;flex-direction:column;gap:6px;height:auto;border-color:var(--green);color:var(--green-dark);background:var(--green-light)" onclick="goCourses()">
+        <i class="ti ti-map-pin" style="font-size:26px"></i>
+        Courses
+        ${sc>0?`<span style="font-size:11px;font-weight:600;color:var(--green-dark)">${sc}</span>`:''}
+      </button>
+      <button class="btn" style="justify-content:center;padding:16px 8px;font-size:14px;flex-direction:column;gap:6px;height:auto;border-color:var(--gold);color:var(--gold);background:var(--gold-light)" onclick="goPlayers()">
+        <i class="ti ti-users" style="font-size:26px"></i>
+        Players
+        ${state.playerDB.length>0?`<span style="font-size:11px;font-weight:600;color:var(--gold)">${state.playerDB.length}</span>`:''}
       </button>
     </div>
     ${state.rounds.length===0?`
@@ -303,12 +311,15 @@ function renderHome(root){
       <div class="card" style="padding:0;overflow:hidden;">
         <div style="padding:1rem 1.25rem;border-bottom:0.5px solid var(--border);"><span class="card-title">Recent Rounds</span></div>
         ${state.rounds.slice().reverse().map(r=>{
-          return`<div class="round-list-item" onclick="openRound('${r.id}')">
-            <div style="flex:1;min-width:0;">
+          return`<div class="round-list-item" style="cursor:default">
+            <div style="flex:1;min-width:0;cursor:pointer" onclick="openRound('${r.id}')">
               <div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(r.course||'Unknown')}</div>
               <div style="font-size:12px;color:var(--text-sec);">${r.date} · ${r.players.map(p=>esc(p.name.split(' ')[0])).join(', ')}</div>
             </div>
-            <i class="ti ti-chevron-right" style="color:var(--text-sec);flex-shrink:0"></i>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+              <i class="ti ti-chevron-right" style="color:var(--text-sec);cursor:pointer" onclick="openRound('${r.id}')"></i>
+              <button class="btn btn-sm btn-danger" style="padding:5px 8px" onclick="deleteRound('${r.id}')" title="Delete round"><i class="ti ti-trash"></i></button>
+            </div>
           </div>`;
         }).join('')}
       </div>`}`;
@@ -454,7 +465,8 @@ function cancelEditCourse(){state.editingCourse=null;state.view=state._returnToR
 function startNewRound(){
   state.view='new-round';state.newRound={players:[],course:''};
   liveInputs.nrCourse='';state.nrSuggestions=[];state.nrShowSugg=false;
-  state.showAddPlayerForm=false;state.newPlayerName='';state.newPlayerHcp='';render();
+  state.showAddPlayerForm=false;state.newPlayerName='';state.newPlayerHcp='';
+  state.nrPickingFromDB=false;state.nrPickedName='';state.nrSaveNewPlayer=false;render();
 }
 function renderNewRound(root){
   const nr=state.newRound,savedSI=nr.course&&state.courseDB[nr.course]?state.courseDB[nr.course].strokeIndexes:null;
@@ -490,7 +502,7 @@ function renderNewRound(root){
         <span class="card-title">Players <span style="font-weight:400;font-size:13px;color:var(--text-sec)">(2–4)</span></span>
         ${nr.players.length<4?`<button class="btn btn-sm" onclick="showAddPlayer()"><i class="ti ti-user-plus"></i> Add</button>`:''}
       </div>
-      ${nr.players.length===0?`<p style="font-size:14px;color:var(--text-sec);">Add 2–4 players to continue.</p>`:''}
+      ${nr.players.length===0?`<p style="font-size:14px;color:var(--text-sec);margin-bottom:0.75rem;">Add 2–4 players to continue.</p>`:''}
       ${nr.players.map((p,i)=>{const av=avatarColor(i);return`<div class="player-row">
         <div class="player-avatar" style="background:${av.bg};color:${av.color};width:34px;height:34px;font-size:13px">${initials(p.name)}</div>
         <span style="flex:1;font-size:15px;color:var(--text)">${esc(p.name)}</span>
@@ -498,14 +510,42 @@ function renderNewRound(root){
         <button class="btn btn-sm btn-danger" onclick="removePlayer(${i})"><i class="ti ti-x"></i></button>
       </div>`;}).join('')}
       ${state.showAddPlayerForm?`<div style="border-top:0.5px solid var(--border);padding-top:1rem;margin-top:0.5rem">
-        <div style="display:grid;grid-template-columns:1fr 90px;gap:8px;margin-bottom:8px;">
-          <input type="text" id="new-player-name" placeholder="Player name" value="${esc(state.newPlayerName)}" oninput="state.newPlayerName=this.value" autocomplete="off"/>
-          <input type="number" id="new-player-hcp" placeholder="HCP" value="${esc(state.newPlayerHcp)}" oninput="state.newPlayerHcp=this.value" min="0" max="54"/>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-primary btn-sm" onclick="addPlayer()"><i class="ti ti-plus"></i> Add</button>
-          <button class="btn btn-sm" onclick="hideAddPlayer()">Cancel</button>
-        </div>
+        ${state.playerDB.length>0&&!state.nrPickingFromDB?`
+          <div class="section-label">Saved players</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:1rem;">
+            ${state.playerDB.filter(sp=>!nr.players.find(p=>p.name===sp.name)).map(sp=>`
+              <button class="btn btn-sm" style="border-color:var(--gold);color:var(--gold)" onclick="nrPickSavedPlayer('${esc(sp.name)}')">
+                ${esc(sp.name)}
+              </button>`).join('')}
+          </div>
+          <div class="section-label">Or add new</div>
+        `:''}
+        ${state.nrPickingFromDB?`
+          <div style="margin-bottom:10px">
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">Enter HCP for ${esc(state.nrPickedName)}</div>
+            <div style="display:grid;grid-template-columns:1fr 90px;gap:8px;margin-bottom:8px;">
+              <div style="padding:9px 12px;background:var(--bg-sec);border-radius:var(--radius-md);font-size:15px;color:var(--text)">${esc(state.nrPickedName)}</div>
+              <input type="number" id="picked-player-hcp" placeholder="HCP" value="${esc(state.newPlayerHcp)}" oninput="state.newPlayerHcp=this.value" min="0" max="54" autocomplete="off"/>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary btn-sm" onclick="addPickedPlayer()"><i class="ti ti-plus"></i> Add</button>
+              <button class="btn btn-sm" onclick="cancelPickSaved()">Cancel</button>
+            </div>
+          </div>
+        `:`
+          <div style="display:grid;grid-template-columns:1fr 90px;gap:8px;margin-bottom:8px;">
+            <input type="text" id="new-player-name" placeholder="Player name" value="${esc(state.newPlayerName)}" oninput="state.newPlayerName=this.value" autocomplete="off"/>
+            <input type="number" id="new-player-hcp" placeholder="HCP" value="${esc(state.newPlayerHcp)}" oninput="state.newPlayerHcp=this.value" min="0" max="54" autocomplete="off"/>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-primary btn-sm" onclick="addPlayer()"><i class="ti ti-plus"></i> Add</button>
+            <button class="btn btn-sm" onclick="hideAddPlayer()">Cancel</button>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-sec);cursor:pointer;margin-left:auto">
+              <input type="checkbox" id="save-player-cb" style="width:auto;padding:0" ${state.nrSaveNewPlayer?'checked':''} onchange="state.nrSaveNewPlayer=this.checked"/>
+              Save player
+            </label>
+          </div>
+        `}
       </div>`:''}
     </div>
     <div style="display:flex;justify-content:flex-end;gap:8px;">
@@ -537,10 +577,66 @@ function nrCourseBlur(){setTimeout(()=>{state.nrShowSugg=false;updateNrDropdown(
 function nrSelectCourse(c){liveInputs.nrCourse=c;state.newRound.course=c;state.nrShowSugg=false;state.nrSuggestions=[];render();}
 function goAddCourseFromRound(){state._returnToRound=true;state.editingCourse={name:state.newRound.course||'',strokeIndexes:Array(18).fill(''),isNew:true};liveInputs.ecName=state.newRound.course||'';state.ecShowSugg=false;state.ecSuggestions=[];state.view='edit-course';render();}
 function goEditCourseFromRound(name){state._returnToRound=true;editCourse(name);}
-function showAddPlayer(){state.showAddPlayerForm=true;state.newPlayerName='';state.newPlayerHcp='';render();}
+function showAddPlayer(){state.showAddPlayerForm=true;state.newPlayerName='';state.newPlayerHcp='';state.nrPickingFromDB=false;state.nrPickedName='';state.nrSaveNewPlayer=false;render();}
 function hideAddPlayer(){state.showAddPlayerForm=false;render();}
-function addPlayer(){const name=state.newPlayerName.trim(),hcp=parseInt(state.newPlayerHcp);if(!name||isNaN(hcp)||hcp<0)return;state.newRound.players.push({name,hcp});state.showAddPlayerForm=false;render();}
+function addPlayer(){
+  const name=state.newPlayerName.trim(),hcp=parseInt(state.newPlayerHcp);
+  if(!name||isNaN(hcp)||hcp<0)return;
+  state.newRound.players.push({name,hcp});
+  if(state.nrSaveNewPlayer&&!state.playerDB.find(p=>p.name===name)){
+    state.playerDB.push({name});DB.save();
+  }
+  state.showAddPlayerForm=false;state.newPlayerName='';state.newPlayerHcp='';state.nrSaveNewPlayer=false;render();
+}
 function removePlayer(i){state.newRound.players.splice(i,1);render();}
+// Saved player picking helpers
+function nrPickSavedPlayer(name){state.nrPickingFromDB=true;state.nrPickedName=name;state.newPlayerHcp='';render();setTimeout(()=>{const el=document.getElementById('picked-player-hcp');if(el)el.focus();},50);}
+function addPickedPlayer(){const hcp=parseInt(state.newPlayerHcp);if(isNaN(hcp)||hcp<0)return;state.newRound.players.push({name:state.nrPickedName,hcp});state.showAddPlayerForm=false;state.nrPickingFromDB=false;state.nrPickedName='';state.newPlayerHcp='';render();}
+function cancelPickSaved(){state.nrPickingFromDB=false;state.nrPickedName='';state.newPlayerHcp='';render();}
+
+// Delete round with confirm
+function deleteRound(id){
+  const r=state.rounds.find(r=>r.id===id);if(!r)return;
+  if(!confirm('Delete round at '+r.course+' ('+r.date+')? This cannot be undone.'))return;
+  state.rounds=state.rounds.filter(r=>r.id!==id);DB.save();render();
+}
+
+// Player library navigation
+function goPlayers(){state.view='players';render();}
+
+// Render player library
+function renderPlayers(root){
+  const players=state.playerDB.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  root.innerHTML=`
+    <div class="header">
+      <button class="btn btn-sm" onclick="goHome()"><i class="ti ti-arrow-left"></i> Back</button>
+      <div style="flex:1"><h1 style="font-size:18px;">Player Library</h1></div>
+    </div>
+    ${players.length===0?`<div class="card"><div class="empty-state">
+      <i class="ti ti-users" style="font-size:44px;opacity:0.2"></i>
+      <p style="font-size:16px;font-weight:600;margin-bottom:8px;color:var(--text);">No saved players</p>
+      <p style="font-size:14px;color:var(--text-sec);">When adding players to a round, check "Save player" to add them here.</p>
+    </div></div>`:`
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:1rem 1.25rem;border-bottom:0.5px solid var(--border);">
+          <span class="card-title">${players.length} player${players.length!==1?'s':''} saved</span>
+        </div>
+        ${players.map((p,i)=>{const av=avatarColor(i);const rounds=state.rounds.filter(r=>r.players.find(rp=>rp.name===p.name));return`<div class="course-list-item">
+          <div class="player-avatar" style="background:${av.bg};color:${av.color};width:36px;height:36px;font-size:13px;flex-shrink:0">${initials(p.name)}</div>
+          <div style="flex:1;min-width:0;margin-left:10px;">
+            <div style="font-size:14px;font-weight:600;color:var(--text)">${esc(p.name)}</div>
+            <div style="font-size:12px;color:var(--text-sec);">${rounds.length} round${rounds.length!==1?'s':''} played${rounds.length>0?' · last HCP: '+rounds[rounds.length-1].players.find(rp=>rp.name===p.name).hcp:''}</div>
+          </div>
+          <button class="btn btn-sm btn-danger" onclick="deletePlayer('${esc(p.name)}')"><i class="ti ti-trash"></i></button>
+        </div>`;}).join('')}
+      </div>`}
+  `;
+}
+function deletePlayer(name){
+  if(!confirm('Remove '+name+' from your player library?'))return;
+  state.playerDB=state.playerDB.filter(p=>p.name!==name);DB.save();render();
+}
+
 function createRound(){
   const nr=state.newRound;if(nr.players.length<2||!nr.course)return;
   const si=state.courseDB[nr.course]?[...state.courseDB[nr.course].strokeIndexes]:null;
