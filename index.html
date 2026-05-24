@@ -94,6 +94,10 @@ input:focus,select:focus{outline:none;border-color:var(--green);box-shadow:0 0 0
 .flip-result{text-align:center;padding:1rem 0;}
 .flip-result .emoji{font-size:52px;margin-bottom:0.5rem;}
 .flip-result .winner{font-size:22px;font-weight:600;color:var(--green-dark);margin-bottom:6px;}
+.spin-wrap{position:relative;width:220px;height:220px;margin:0 auto 1.25rem;}
+.spin-canvas{width:220px;height:220px;border-radius:50%;box-shadow:0 4px 20px rgba(0,0,0,0.15);}
+.spin-needle{position:absolute;top:50%;left:50%;width:0;height:0;transform-origin:0 0;pointer-events:none;}
+.spin-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:50%;background:var(--card-bg);border:3px solid var(--border-md);box-shadow:0 2px 6px rgba(0,0,0,0.2);}
 .player-sel-btn{display:flex;align-items:center;gap:10px;width:100%;padding:13px 14px;border-radius:var(--radius-md);border:2px solid var(--border);background:var(--card-bg);cursor:pointer;transition:all 0.15s;margin-bottom:8px;text-align:left;}
 .player-sel-btn:active{transform:scale(0.98);}
 .player-sel-btn.selected-banker{border-color:var(--gold);background:var(--gold);color:#fff;}
@@ -767,30 +771,40 @@ function createRound(){
 // ── Flip ───────────────────────────────────────────────────────────────────
 function renderFlip(root){
   const round=state.currentRound;
+  const players=round.players;
   root.innerHTML=`
     <div class="header"><div class="header-icon"><i class="ti ti-golf"></i></div><div><h1>Tee Flip</h1><p>Determine the hole 1 banker</p></div></div>
-    <div class="card" style="text-align:center;padding:2.5rem 1.5rem;">
-      <p style="font-size:15px;color:var(--text-sec);margin-bottom:1.5rem;">Randomly select who banks hole 1</p>
-      <div style="font-size:80px;margin-bottom:1.5rem;">${state.flipResult!==null?'⛳':'🎲'}</div>
+    <div class="card" style="text-align:center;padding:1.5rem;">
+      <p style="font-size:15px;color:var(--text-sec);margin-bottom:1.25rem;">Spin to select who banks hole 1</p>
+      <div class="spin-wrap">
+        <canvas id="spin-canvas" class="spin-canvas" width="220" height="220"></canvas>
+        <div class="spin-center"></div>
+      </div>
       ${state.flipResult!==null?`
-        <p style="font-size:13px;color:var(--text-sec);margin-bottom:6px;">Hole 1 banker:</p>
-        <p style="font-size:26px;font-weight:700;color:var(--green-dark);margin-bottom:12px;">${esc(round.players[state.flipResult].name)}</p>
+        <p style="font-size:13px;color:var(--text-sec);margin-bottom:4px;">Hole 1 banker:</p>
+        <p style="font-size:24px;font-weight:700;color:var(--green-dark);margin-bottom:10px;">${esc(players[state.flipResult].name)}</p>
         <span class="badge badge-gold"><i class="ti ti-star"></i> Banker</span>
-        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:1.5rem;">
-          <button class="btn" onclick="flipTee()"><i class="ti ti-refresh"></i> Reflip</button>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:1.25rem;">
+          <button class="btn" onclick="spinWheel(${JSON.stringify(players.map(p=>p.name))}, null, 'initial')"><i class="ti ti-refresh"></i> Respin</button>
           <button class="btn btn-primary" onclick="confirmBanker()"><i class="ti ti-check"></i> Confirm & Start</button>
         </div>`:`
-        <button class="btn btn-gold" style="font-size:17px;padding:14px 32px;" onclick="flipTee()"><i class="ti ti-arrows-shuffle"></i> Flip the Tee!</button>`}
-      <div style="margin-top:2rem;border-top:0.5px solid var(--border);padding-top:1.25rem;">
-        <p style="font-size:13px;color:var(--text-sec);margin-bottom:10px;">Or manually select:</p>
+        <button class="btn btn-gold" style="font-size:17px;padding:14px 32px;" onclick="spinWheel(${JSON.stringify(players.map(p=>p.name))}, null, 'initial')">
+          <i class="ti ti-arrows-shuffle"></i> Spin!
+        </button>`}
+      <div style="margin-top:1.5rem;border-top:0.5px solid var(--border);padding-top:1rem;">
+        <p style="font-size:12px;color:var(--text-sec);margin-bottom:8px;">Or manually select:</p>
         <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
-          ${round.players.map((p,i)=>`<button class="btn btn-sm ${i===state.flipResult?'btn-gold':''}" onclick="setFlipResult(${i})">${esc(p.name)}</button>`).join('')}
+          ${players.map((p,i)=>`<button class="btn btn-sm ${i===state.flipResult?'btn-gold':''}" onclick="setFlipResult(${i})">${esc(p.name)}</button>`).join('')}
         </div>
       </div>
     </div>`;
+  // Draw initial wheel after DOM is ready
+  setTimeout(()=>{
+    drawWheelRotated('spin-canvas', players.map(p=>p.name), window._spinAngle||0, state.flipResult);
+  },0);
 }
 function flipTee(){state.flipResult=Math.floor(Math.random()*state.currentRound.players.length);render();}
-function setFlipResult(i){state.flipResult=i;render();}
+function setFlipResult(i){state.flipResult=i;window._spinAngle=sliceAngleForIndex(i,state.currentRound.players.length);render();}
 function confirmBanker(){
   if(state.flipResult===null)return;
   const round=state.currentRound;round.initialBanker=state.flipResult;round.bankers=computeAllBankers(round);
@@ -1107,14 +1121,27 @@ function renderTieModal(round,tie){
   // Step: tee flip (only reached when no long putt and prior banker not in tie)
   if(tm.step==='flip'){
     const done=tm.flipResult!==null;
+    const tiedNames=tied.map(i=>round.players[i].name);
+    const tiedNamesJSON=JSON.stringify(tiedNames);
+    // After render, draw the wheel
+    setTimeout(()=>{
+      const cv=document.getElementById('tie-spin-canvas');
+      if(cv)drawWheel('tie-spin-canvas',tiedNames,done?tied.indexOf(tm.flipResult):null,window._tieSpinAngle||0);
+    },0);
     return`<div class="modal-overlay"><div class="modal">
       <h2><i class="ti ti-arrows-shuffle" style="color:var(--amber)"></i> Tee Flip — Hole ${holeIdx+2} Banker</h2>
-      <div class="modal-step">No long putt. Neither tied player was the prior banker. Flip a tee to decide.</div>
-      <div class="flip-result"><div class="emoji">${done?'⛳':'🎲'}</div>
-        ${done?`<div class="winner">${esc(round.players[tm.flipResult].name)}</div><span class="badge badge-gold"><i class="ti ti-star"></i> Banks hole ${holeIdx+2}</span>`:''}
+      <div class="modal-step">No long putt. Neither tied player was the prior banker. Spin to decide.</div>
+      <div class="spin-wrap" style="width:200px;height:200px;margin:0.75rem auto;">
+        <canvas id="tie-spin-canvas" class="spin-canvas" width="200" height="200"></canvas>
+        <div class="spin-center"></div>
       </div>
+      ${done?`
+        <div style="text-align:center;margin-bottom:0.75rem;">
+          <div class="flip-result" style="padding:0.25rem 0"><div class="winner">${esc(round.players[tm.flipResult].name)}</div></div>
+          <span class="badge badge-gold"><i class="ti ti-star"></i> Banks hole ${holeIdx+2}</span>
+        </div>`:''}
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:1rem;">
-        <button class="btn btn-gold" onclick="tieModalFlip()"><i class="ti ti-arrows-shuffle"></i> ${done?'Reflip':'Flip!'}</button>
+        <button class="btn btn-gold" onclick="tieModalFlip()"><i class="ti ti-arrows-shuffle"></i> ${done?'Respin':'Spin!'}</button>
         ${tied.map(i=>`<button class="btn btn-sm ${i===tm.flipResult?'btn-gold':''}" onclick="tieFlipSelect(${i})">${esc(round.players[i].name)}</button>`).join('')}
       </div>
       ${done?`<div class="modal-actions"><button class="btn btn-primary" onclick="confirmTieFlip()"><i class="ti ti-check"></i> Confirm</button></div>`:''}
@@ -1169,8 +1196,20 @@ function tieNoLongPutt(){
 }
 
 // Tee flip helpers
-function tieModalFlip(){state.tieModal.flipResult=state.tieModal.tied[Math.floor(Math.random()*state.tieModal.tied.length)];render();}
-function tieFlipSelect(i){state.tieModal.flipResult=i;render();}
+function tieModalFlip(){
+  const tied=state.tieModal.tied;
+  const winner=tied[Math.floor(Math.random()*tied.length)];
+  const tiedNames=tied.map(i=>state.currentRound.players[i].name);
+  const winnerSlot=tied.indexOf(winner);
+  spinWheel(tiedNames,winnerSlot,'tie',()=>{state.tieModal.flipResult=winner;render();});
+}
+function tieFlipSelect(i){
+  state.tieModal.flipResult=i;
+  const tied=state.tieModal.tied;
+  const tiedNames=tied.map(idx=>state.currentRound.players[idx].name);
+  window._tieSpinAngle=sliceAngleForIndex(tied.indexOf(i),tied.length);
+  render();
+}
 function confirmTieFlip(){if(state.tieModal.flipResult===null)return;resolveWithWinner(state.tieModal.holeIdx,state.tieModal.flipResult);}
 function resolveWithWinner(holeIdx,winnerIdx){const round=state.currentRound;if(!round.tieResolution)round.tieResolution={};round.tieResolution[String(holeIdx)]={winner:winnerIdx};round.bankers=computeAllBankers(round);state.tieModal=null;DB.save();render();}
 function setScore(h,i,val){state.currentRound.scores[h][i]=val===''?'':parseInt(val);state.currentRound.bankers=computeAllBankers(state.currentRound);DB.save();clearTimeout(window._st);window._st=setTimeout(render,300);}
@@ -1186,6 +1225,144 @@ function openRound(id){
   state.currentRound.bankers=computeAllBankers(state.currentRound);
   let last=0;for(let h=0;h<18;h++){if(state.currentRound.scores[h].some(s=>s!==''&&s!==null))last=h;}
   state.activeHole=last;state.view='round';state.roundTab='scorecard';state.tieModal=null;state.holePhase='scores';state.doubleSelection=new Set();render();
+}
+
+// ── Spinner engine ────────────────────────────────────────────────────────────
+const SLICE_COLORS=['#1D9E75','#0C447C','#BA7517','#72243E','#085041','#633806'];
+
+function sliceAngleForIndex(idx,total){
+  // Returns the angle (radians) that points to the CENTER of slice idx
+  const sliceAngle=(2*Math.PI)/total;
+  return idx*sliceAngle+sliceAngle/2;
+}
+
+function drawWheel(canvasId,names,winnerIdx,needleAngle){
+  const cv=document.getElementById(canvasId);if(!cv)return;
+  const ctx=cv.getContext('2d');
+  const W=cv.width,cx=W/2,cy=W/2,r=W/2-4;
+  const n=names.length,sliceAngle=(2*Math.PI)/n;
+  ctx.clearRect(0,0,W,W);
+  // Draw slices
+  for(let i=0;i<n;i++){
+    const start=-Math.PI/2+i*sliceAngle;
+    const end=start+sliceAngle;
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,end);ctx.closePath();
+    ctx.fillStyle=SLICE_COLORS[i%SLICE_COLORS.length];
+    ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=2;ctx.stroke();
+    // Label
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(start+sliceAngle/2);
+    ctx.textAlign='right';ctx.fillStyle='#fff';
+    ctx.font=`bold ${n>3?13:15}px -apple-system,sans-serif`;
+    ctx.shadowColor='rgba(0,0,0,0.3)';ctx.shadowBlur=3;
+    ctx.fillText(names[i],r-10,5);
+    ctx.restore();
+  }
+  // Highlight winner slice
+  if(winnerIdx!==null&&winnerIdx>=0){
+    const start=-Math.PI/2+winnerIdx*sliceAngle;
+    const end=start+sliceAngle;
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,end);ctx.closePath();
+    ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.stroke();
+  }
+  // Draw needle (fixed at top, pointing down into wheel)
+  const nx=cx,ny=8;
+  ctx.beginPath();
+  ctx.moveTo(nx,ny);ctx.lineTo(nx-8,ny-14);ctx.lineTo(nx+8,ny-14);ctx.closePath();
+  ctx.fillStyle='#fff';ctx.shadowColor='rgba(0,0,0,0.4)';ctx.shadowBlur=4;ctx.fill();
+  ctx.shadowBlur=0;
+  // Rotate canvas content by needleAngle (we rotate the wheel, needle stays at top)
+  // Actually: redraw with rotation
+}
+
+function drawWheelRotated(canvasId,names,rotation,winnerIdx){
+  const cv=document.getElementById(canvasId);if(!cv)return;
+  const ctx=cv.getContext('2d');
+  const W=cv.width,cx=W/2,cy=W/2,r=W/2-4;
+  const n=names.length,sliceAngle=(2*Math.PI)/n;
+  ctx.clearRect(0,0,W,W);
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(rotation);ctx.translate(-cx,-cy);
+  for(let i=0;i<n;i++){
+    const start=-Math.PI/2+i*sliceAngle,end=start+sliceAngle;
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,end);ctx.closePath();
+    ctx.fillStyle=winnerIdx===i?lighten(SLICE_COLORS[i%SLICE_COLORS.length]):SLICE_COLORS[i%SLICE_COLORS.length];
+    ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=2;ctx.stroke();
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(start+sliceAngle/2);
+    ctx.textAlign='right';ctx.fillStyle='#fff';
+    ctx.font=`bold ${n>3?13:15}px -apple-system,sans-serif`;
+    ctx.shadowColor='rgba(0,0,0,0.35)';ctx.shadowBlur=3;
+    ctx.fillText(names[i],r-10,5);
+    ctx.restore();
+  }
+  ctx.restore();
+  // Fixed needle at top
+  ctx.beginPath();ctx.moveTo(cx,6);ctx.lineTo(cx-9,6-16);ctx.lineTo(cx+9,6-16);ctx.closePath();
+  ctx.fillStyle='#e8e8e8';ctx.shadowColor='rgba(0,0,0,0.4)';ctx.shadowBlur=4;ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,0.2)';ctx.lineWidth=1;ctx.stroke();ctx.shadowBlur=0;
+}
+
+function lighten(hex){
+  // Simple lighten for winner highlight
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return`rgb(${Math.min(255,r+50)},${Math.min(255,g+50)},${Math.min(255,b+50)})`;
+}
+
+function spinWheel(names,forceWinnerSlot,target,callback){
+  // target: 'initial' | 'tie'
+  const canvasId=target==='tie'?'tie-spin-canvas':'spin-canvas';
+  const n=names.length;
+  const winnerSlot=forceWinnerSlot!==null&&forceWinnerSlot!==undefined
+    ?forceWinnerSlot
+    :Math.floor(Math.random()*n);
+  const sliceAngle=(2*Math.PI)/n;
+
+  // We want the needle (at top = -PI/2 in wheel coords) to point at the center of winnerSlot
+  // Slice i center in unrotated wheel = -PI/2 + i*sliceAngle + sliceAngle/2
+  // After rotation R, needle points at -PI/2 - R in wheel coords
+  // So we need: -PI/2 - R = -PI/2 + winnerSlot*sliceAngle + sliceAngle/2  (mod 2PI)
+  // => R = -(winnerSlot*sliceAngle + sliceAngle/2)  (mod 2PI)
+  const targetRotation=-(winnerSlot*sliceAngle+sliceAngle/2);
+  const fullSpins=(4+Math.floor(Math.random()*4))*2*Math.PI; // 4-7 full spins
+  const currentRotation=target==='tie'?(window._tieSpinAngle||0):(window._spinAngle||0);
+  // Normalize current to [0, 2PI)
+  const normCurrent=((currentRotation%( 2*Math.PI))+(2*Math.PI))%(2*Math.PI);
+  const normTarget=((targetRotation%(2*Math.PI))+(2*Math.PI))%(2*Math.PI);
+  const finalAngle=normTarget-fullSpins; // spins backward then lands
+
+  const duration=3000+Math.random()*1000;
+  const startTime=performance.now();
+  const startAngle=normCurrent;
+
+  function easeOut(t){return 1-Math.pow(1-t,4);}
+
+  function animate(now){
+    const elapsed=now-startTime;
+    const t=Math.min(elapsed/duration,1);
+    const angle=startAngle+(finalAngle-startAngle)*easeOut(t);
+    drawWheelRotated(canvasId,names,angle,t===1?winnerSlot:null);
+    if(t<1){
+      requestAnimationFrame(animate);
+    } else {
+      // Store final angle
+      if(target==='tie')window._tieSpinAngle=finalAngle;
+      else window._spinAngle=finalAngle;
+      // Set winner in state
+      if(target==='initial'){
+        state.flipResult=winnerSlot;
+        render();
+      } else if(callback){
+        callback();
+      }
+    }
+  }
+  requestAnimationFrame(animate);
+}
+
+// Update flipTee to use spinner
+function flipTee(){
+  const players=state.currentRound.players;
+  spinWheel(players.map(p=>p.name),null,'initial');
 }
 
 // Boot
