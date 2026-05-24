@@ -880,13 +880,13 @@ function renderScoresPhase(round,h,banker){
         let resultPill='',dollarCell='';
         if(isBank){resultPill=`<span class="pill pill-bank">Banker</span>`;const{matchups}=holeMatchups(round,h);const tot=matchups.reduce((s,m)=>m.result==='win'?s-m.betAmt:m.result==='loss'?s+m.betAmt:s,0);if(matchups.some(m=>m.result!=='pending'))dollarCell=`<span style="font-size:13px;font-weight:700;color:${tot>=0?'var(--green)':'var(--red)'}"> ${tot>=0?'+$':'-$'}${Math.abs(tot)}</span>`;}
         else{const bNet=netScore(round.scores[h][banker],round.players[banker].hcp,h,si);if(net!==null&&bNet!==null){if(net<bNet){resultPill=`<span class="pill pill-win">Win</span>`;dollarCell=`<span style="font-size:13px;font-weight:700;color:var(--green)">+$${betAmt}</span>`;}else if(net>bNet){resultPill=`<span class="pill pill-loss">Loss</span>`;dollarCell=`<span style="font-size:13px;font-weight:700;color:var(--red)">-$${betAmt}</span>`;}else{resultPill=`<span class="pill pill-push">Push</span>`;dollarCell=`<span style="font-size:13px;color:var(--text-sec)">$0</span>`;} }}
-        return`<div style="display:grid;grid-template-columns:1fr 50px 50px 64px 72px;gap:5px;align-items:center;margin-bottom:8px;padding:8px;border-radius:10px;background:${isBank?'var(--gold-light)':'transparent'}">
+        return`<div style="display:grid;grid-template-columns:1fr 50px 50px 64px 72px;gap:5px;align-items:center;margin-bottom:8px;padding:8px;border-radius:10px;background:${isBank?'var(--green-dark)':'transparent'}">
           <div style="display:flex;align-items:center;gap:8px;">
-            <div class="player-avatar" style="background:${av.bg};color:${av.color};width:30px;height:30px;font-size:11px">${initials(p.name)}</div>
-            <div><div style="font-size:13px;font-weight:${isBank?600:400};color:var(--text)">${esc(p.name)}</div><div style="font-size:10px;color:var(--text-sec)">-${strokes}${isBank?'':' · $'+betAmt}</div></div>
+            <div class="player-avatar" style="background:${isBank?'rgba(255,255,255,0.2)':av.bg};color:${isBank?'#fff':av.color};width:30px;height:30px;font-size:11px">${initials(p.name)}</div>
+            <div><div style="font-size:13px;font-weight:${isBank?600:400};color:${isBank?'#fff':'var(--text)'}">${esc(p.name)}</div><div style="font-size:10px;color:${isBank?'rgba(255,255,255,0.7)':'var(--text-sec)'}">-${strokes}${isBank?'':' · $'+betAmt}</div></div>
           </div>
           <div style="text-align:center"><input class="hole-input" type="number" min="1" max="20" placeholder="—" value="${gross!==''&&gross!==null?gross:''}" onchange="setScore(${h},${i},this.value)" oninput="setScore(${h},${i},this.value)"/></div>
-          <div style="text-align:center;font-size:15px;font-weight:600;color:var(--text)">${net!==null?net:'—'}</div>
+          <div style="text-align:center;font-size:15px;font-weight:600;color:${isBank?'#fff':'var(--text)'}">${net!==null?net:'—'}</div>
           <div style="text-align:center">${resultPill}</div>
           <div style="text-align:center">${dollarCell}</div>
         </div>`;
