@@ -844,7 +844,7 @@ function renderDoublesPhase(round,h,banker,allIdxs){
         <div class="player-avatar" style="background:${isSel?'rgba(255,255,255,0.25)':av.bg};color:${isSel?'#fff':av.color};width:34px;height:34px;font-size:12px;flex-shrink:0">${initials(p.name)}</div>
         <div style="flex:1;text-align:left">
           <div style="font-size:15px;font-weight:${isBank?600:400};color:${isSel?'#fff':'var(--text)'}">${esc(p.name)}</div>
-          <div style="font-size:12px;color:${isSel?'rgba(255,255,255,0.75)':'var(--text-sec)'}">${isBank?'Banker':'HCP '+p.hcp+(strokes>0?' · -'+strokes+' stroke'+(strokes>1?'s':''):'')}</div>
+          <div style="font-size:12px;color:${isSel?'rgba(255,255,255,0.75)':'var(--text-sec)'}">${isBank?'Banker · ':' '}HCP ${p.hcp}${strokes>0?' · -'+strokes+' stroke'+(strokes>1?'s':''):''}</div>
         </div>
         ${!isBank?`<span class="bet-chip ${betClass}">$${previewAmt}</span>`:''}
       </button>`;}).join('')}
