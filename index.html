@@ -472,8 +472,28 @@ function updateEcDropdown(){
 }
 function ecNameBlur(){setTimeout(()=>{state.ecShowSugg=false;updateEcDropdown();},200);}
 function ecSelectName(name){liveInputs.ecName=name;state.editingCourse.name=name;state.ecShowSugg=false;state.ecSuggestions=[];render();}
-function ecSetSI(i,v){state.editingCourse.strokeIndexes[i]=v===''?'':parseInt(v);clearTimeout(window._siT);window._siT=setTimeout(()=>render(),500);}
-function ecSetPar(i,v){if(!state.editingCourse.pars)state.editingCourse.pars=Array(18).fill('');state.editingCourse.pars[i]=v===''?'':parseInt(v);clearTimeout(window._parT);window._parT=setTimeout(()=>render(),500);}
+function ecSetSI(i,v){
+  state.editingCourse.strokeIndexes[i]=v===''?'':parseInt(v);
+  const parsed=parseInt(v);
+  if(!isNaN(parsed)&&parsed>=1&&parsed<=18&&i<17){
+    // Only auto-advance if the value is complete (1-9 are always complete; 10-18 need two digits)
+    if(parsed>=1&&parsed<=9){
+      const next=document.getElementById('si-'+(i+1));
+      if(next){next.focus();next.select();}
+    }
+  }
+  clearTimeout(window._siT);window._siT=setTimeout(()=>render(),500);
+}
+function ecSetPar(i,v){
+  if(!state.editingCourse.pars)state.editingCourse.pars=Array(18).fill('');
+  const parsed=parseInt(v);
+  state.editingCourse.pars[i]=v===''?'':parsed;
+  if([3,4,5].includes(parsed)&&i<17){
+    const next=document.getElementById('par-'+(i+1));
+    if(next){next.focus();next.select();}
+  }
+  clearTimeout(window._parT);window._parT=setTimeout(()=>render(),500);
+}
 function ecQuickFill(t){
   if(t==='clear')state.editingCourse.strokeIndexes=Array(18).fill('');
   else if(t==='seq')state.editingCourse.strokeIndexes=[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
