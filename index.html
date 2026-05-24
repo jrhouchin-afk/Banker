@@ -410,9 +410,9 @@ function renderEditCourse(root){
       </div>
       <p style="font-size:13px;color:var(--text-sec);margin-bottom:1rem;">1 = hardest, 18 = easiest. Each number used exactly once. Find these on your scorecard.</p>
       <div class="section-label" style="margin-bottom:6px">Front 9</div>
-      <div class="si-grid">${[0,1,2,3,4,5,6,7,8].map(i=>`<div class="si-cell"><label>H${i+1}</label><input class="si-input" id="si-${i}" type="number" min="1" max="18" placeholder="—" value="${si[i]!==''?si[i]:''}" oninput="ecSetSI(${i},this.value)"/></div>`).join('')}</div>
+      <div class="si-grid">${[0,1,2,3,4,5,6,7,8].map(i=>`<div class="si-cell"><label>H${i+1}</label><input class="si-input" id="si-${i}" type="number" min="1" max="18" placeholder="—" value="${si[i]!==''?si[i]:''}" oninput="ecSetSI(${i},this.value)" onkeydown="ecSIKeydown(${i},event)"/></div>`).join('')}</div>
       <div class="section-label" style="margin-bottom:6px;margin-top:12px">Back 9</div>
-      <div class="si-grid">${[9,10,11,12,13,14,15,16,17].map(i=>`<div class="si-cell"><label>H${i+1}</label><input class="si-input" id="si-${i}" type="number" min="1" max="18" placeholder="—" value="${si[i]!==''?si[i]:''}" oninput="ecSetSI(${i},this.value)"/></div>`).join('')}</div>
+      <div class="si-grid">${[9,10,11,12,13,14,15,16,17].map(i=>`<div class="si-cell"><label>H${i+1}</label><input class="si-input" id="si-${i}" type="number" min="1" max="18" placeholder="—" value="${si[i]!==''?si[i]:''}" oninput="ecSetSI(${i},this.value)" onkeydown="ecSIKeydown(${i},event)"/></div>`).join('')}</div>
       ${allFilled&&!allInRange?`<p style="font-size:12px;color:var(--red);margin-top:8px;"><i class="ti ti-alert-circle"></i> Values must be between 1 and 18.</p>`:''}
       ${allFilled&&allInRange&&!allUnique?`<p style="font-size:12px;color:var(--red);margin-top:8px;"><i class="ti ti-alert-circle"></i> Each number 1–18 must appear exactly once.</p>`:''}
       ${siValid?`<p style="font-size:12px;color:var(--green);margin-top:8px;"><i class="ti ti-check"></i> All 18 stroke indexes valid.</p>`:''}
@@ -474,15 +474,15 @@ function ecNameBlur(){setTimeout(()=>{state.ecShowSugg=false;updateEcDropdown();
 function ecSelectName(name){liveInputs.ecName=name;state.editingCourse.name=name;state.ecShowSugg=false;state.ecSuggestions=[];render();}
 function ecSetSI(i,v){
   state.editingCourse.strokeIndexes[i]=v===''?'':parseInt(v);
-  const parsed=parseInt(v);
-  if(!isNaN(parsed)&&parsed>=1&&parsed<=18&&i<17){
-    // Only auto-advance if the value is complete (1-9 are always complete; 10-18 need two digits)
-    if(parsed>=1&&parsed<=9){
-      const next=document.getElementById('si-'+(i+1));
-      if(next){next.focus();next.select();}
-    }
-  }
   clearTimeout(window._siT);window._siT=setTimeout(()=>render(),500);
+}
+// Advance to next SI cell on Tab or Enter
+function ecSIKeydown(i,e){
+  if(e.key==='Enter'||(e.key==='Tab'&&!e.shiftKey)){
+    e.preventDefault();
+    const next=document.getElementById('si-'+(i+1));
+    if(next){next.focus();next.select();}
+  }
 }
 function ecSetPar(i,v){
   if(!state.editingCourse.pars)state.editingCourse.pars=Array(18).fill('');
