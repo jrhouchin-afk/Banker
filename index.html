@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Banker">
+<meta name="apple-mobile-web-app-title" content="Golf Banker">
 <meta name="theme-color" content="#1D9E75">
 <link rel="manifest" href="manifest.json">
-<title>Golf Banker</title>
+<title>Banker</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -282,23 +282,27 @@ function renderHome(root){
   root.innerHTML=`
     <div class="header">
       <div class="header-icon"><i class="ti ti-golf"></i></div>
-      <div><h1>Golf Banker</h1><p>Track your rounds and side bets</p></div>
+      <div><h1>Banker</h1><p>Track your rounds and side bets</p></div>
     </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:1rem;flex-wrap:wrap;">
-      <button class="btn" onclick="goCourses()"><i class="ti ti-map-pin"></i> Courses${sc>0?` <span style="background:var(--green-light);color:var(--green-dark);padding:1px 7px;border-radius:99px;font-size:11px;font-weight:600">${sc}</span>`:''}</button>
-      <button class="btn btn-primary" onclick="startNewRound()"><i class="ti ti-plus"></i> New Round</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.5rem;">
+      <button class="btn btn-primary" style="justify-content:center;padding:18px 12px;font-size:15px;flex-direction:column;gap:8px;height:auto" onclick="startNewRound()">
+        <i class="ti ti-golf" style="font-size:28px"></i>
+        Start New Round
+      </button>
+      <button class="btn" style="justify-content:center;padding:18px 12px;font-size:15px;flex-direction:column;gap:8px;height:auto;border-color:var(--green);color:var(--green-dark);background:var(--green-light)" onclick="goCourses()">
+        <i class="ti ti-map-pin" style="font-size:28px"></i>
+        Add New Course
+        ${sc>0?`<span style="font-size:11px;font-weight:600;color:var(--green-dark)">${sc} saved</span>`:''}
+      </button>
     </div>
     ${state.rounds.length===0?`
-      <div class="card"><div class="empty-state"><i class="ti ti-golf"></i>
-        <p style="font-size:17px;font-weight:600;margin-bottom:8px;color:var(--text);">No rounds yet</p>
-        <p style="font-size:14px;">Add your courses ahead of time, then start a round.</p>
-        <button class="btn btn-primary" style="margin-top:1.5rem" onclick="goCourses()"><i class="ti ti-map-pin"></i> Manage Courses</button>
+      <div class="card"><div class="empty-state" style="padding:2rem 1rem;">
+        <i class="ti ti-flag-2" style="font-size:44px;opacity:0.2"></i>
+        <p style="font-size:15px;color:var(--text-sec);margin-top:0.75rem;">Your rounds will appear here</p>
       </div></div>`:`
       <div class="card" style="padding:0;overflow:hidden;">
         <div style="padding:1rem 1.25rem;border-bottom:0.5px solid var(--border);"><span class="card-title">Recent Rounds</span></div>
         ${state.rounds.slice().reverse().map(r=>{
-          const totals=computeTotals(r);
-          const best=r.players.reduce((bi,p,i)=>totals[i]>totals[bi]?i:bi,0);
           return`<div class="round-list-item" onclick="openRound('${r.id}')">
             <div style="flex:1;min-width:0;">
               <div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(r.course||'Unknown')}</div>
@@ -722,19 +726,76 @@ function renderSettlement(root){
 }
 
 function renderTieModal(round,tie){
-  const tm=state.tieModal;if(!tm)return'';const{holeIdx,tied,prevInTie}=tm;
-  if(tm.step==='flip'){const done=tm.flipResult!==null;return`<div class="modal-overlay"><div class="modal"><h2><i class="ti ti-arrows-shuffle" style="color:var(--amber)"></i> Tee Flip — Hole ${holeIdx+2} Banker</h2><div class="modal-step">Putts unknown. Flip between ${tied.map(i=>esc(round.players[i].name)).join(' & ')}.</div>${done?`<div class="flip-result"><div class="emoji">⛳</div><div class="winner">${esc(round.players[tm.flipResult].name)}</div><span class="badge badge-gold"><i class="ti ti-star"></i> Banks hole ${holeIdx+2}</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${tied.map(i=>`<button class="btn btn-sm ${i===tm.flipResult?'btn-gold':''}" onclick="tieFlipSelect(${i})">${esc(round.players[i].name)}</button>`).join('')}</div><div class="modal-actions"><button class="btn" onclick="tieModalFlip()"><i class="ti ti-refresh"></i> Reflip</button><button class="btn btn-primary" onclick="confirmTieFlip()">Confirm</button></div>`:`<div class="flip-result"><div class="emoji">🎲</div></div><div style="display:flex;gap:8px;justify-content:center;margin-bottom:1rem;"><button class="btn btn-gold" onclick="tieModalFlip()"><i class="ti ti-arrows-shuffle"></i> Flip!</button></div><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">${tied.map(i=>`<button class="btn btn-sm" onclick="tieFlipSelect(${i})">${esc(round.players[i].name)}</button>`).join('')}</div>`}</div></div>`;}
-  return`<div class="modal-overlay"><div class="modal"><h2><i class="ti ti-scale" style="color:var(--amber)"></i> Tie on Hole ${holeIdx+1}</h2><div class="modal-step">${tied.map(i=>esc(round.players[i].name)).join(' & ')} tied for low net. ${prevInTie?`${esc(round.players[tm.prevBanker].name)} was banker — retains if putts unknown.`:`Neither was banker — tee flip decides.`}</div><div class="section-label">Putt lengths (ft) — leave blank if unknown</div>${tied.map(i=>{const av=avatarColor(i),val=tm.putts&&tm.putts[i]!=null?tm.putts[i]:'';return`<div class="player-row" style="margin-top:8px"><div class="player-avatar" style="background:${av.bg};color:${av.color};width:34px;height:34px;font-size:13px">${initials(round.players[i].name)}</div><span style="flex:1;font-size:15px;color:var(--text)">${esc(round.players[i].name)}</span>${round.bankers[holeIdx]===i?`<span class="badge badge-gold" style="margin-right:4px">Prior banker</span>`:''}<input type="number" class="putt-input" placeholder="ft" min="0" step="0.5" value="${val}" oninput="tieSetPutt(${i},this.value)"/></div>`;}).join('')}<div class="modal-actions"><button class="btn" onclick="confirmTiePutts(true)">Skip</button><button class="btn btn-primary" onclick="confirmTiePutts(false)">Confirm</button></div></div></div>`;
+  const tm=state.tieModal;if(!tm)return'';
+  const{holeIdx,tied,prevInTie}=tm;
+
+  // Step: tee flip (only reached when no long putt and prior banker not in tie)
+  if(tm.step==='flip'){
+    const done=tm.flipResult!==null;
+    return`<div class="modal-overlay"><div class="modal">
+      <h2><i class="ti ti-arrows-shuffle" style="color:var(--amber)"></i> Tee Flip — Hole ${holeIdx+2} Banker</h2>
+      <div class="modal-step">No long putt. Neither tied player was the prior banker. Flip a tee to decide.</div>
+      <div class="flip-result"><div class="emoji">${done?'⛳':'🎲'}</div>
+        ${done?`<div class="winner">${esc(round.players[tm.flipResult].name)}</div><span class="badge badge-gold"><i class="ti ti-star"></i> Banks hole ${holeIdx+2}</span>`:''}
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:1rem;">
+        <button class="btn btn-gold" onclick="tieModalFlip()"><i class="ti ti-arrows-shuffle"></i> ${done?'Reflip':'Flip!'}</button>
+        ${tied.map(i=>`<button class="btn btn-sm ${i===tm.flipResult?'btn-gold':''}" onclick="tieFlipSelect(${i})">${esc(round.players[i].name)}</button>`).join('')}
+      </div>
+      ${done?`<div class="modal-actions"><button class="btn btn-primary" onclick="confirmTieFlip()"><i class="ti ti-check"></i> Confirm</button></div>`:''}
+    </div></div>`;
+  }
+
+  // Step: select longest putt — one button per tied player + No Long Putt
+  return`<div class="modal-overlay"><div class="modal">
+    <h2><i class="ti ti-scale" style="color:var(--amber)"></i> Tie on Hole ${holeIdx+1}</h2>
+    <p style="font-size:14px;color:var(--text-sec);margin-bottom:1.25rem;">
+      ${tied.map(i=>esc(round.players[i].name)).join(' & ')} tied for low net
+      (${netScore(round.scores[holeIdx][tied[0]],round.players[tied[0]].hcp,holeIdx,round.strokeIndexes)}).
+      Who had the longest putt?
+    </p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:1rem;">
+      ${tied.map(i=>{
+        const av=avatarColor(i);
+        const isPriorBanker=round.bankers[holeIdx]===i;
+        return`<button class="player-sel-btn" style="border-width:1.5px" onclick="tieSelectPuttWinner(${i})">
+          <div class="player-avatar" style="background:${av.bg};color:${av.color};width:34px;height:34px;font-size:13px">${initials(round.players[i].name)}</div>
+          <div style="flex:1;text-align:left">
+            <div style="font-size:15px;font-weight:600;color:var(--text)">${esc(round.players[i].name)}</div>
+            ${isPriorBanker?`<div style="font-size:12px;color:var(--gold)">Prior banker</div>`:''}
+          </div>
+          <i class="ti ti-chevron-right" style="color:var(--text-sec)"></i>
+        </button>`;
+      }).join('')}
+    </div>
+    <button class="btn" style="width:100%;justify-content:center;padding:12px;border-style:dashed" onclick="tieNoLongPutt()">
+      <i class="ti ti-x"></i> No Long Putt
+    </button>
+  </div></div>`;
 }
 
 // ── Actions ────────────────────────────────────────────────────────────────
 function toggleDoubleSelect(i){if(state.doubleSelection.has(i))state.doubleSelection.delete(i);else state.doubleSelection.add(i);render();}
 function confirmDoubles(noDoubles){const round=state.currentRound,h=state.activeHole,banker=round.bankers[h],allIdxs=round.players.map((_,i)=>i);round.doubles[h]=noDoubles||state.doubleSelection.size===0?null:resolveDoubles(state.doubleSelection,banker,allIdxs);state.holePhase='scores';state.doubleSelection=new Set();DB.save();render();}
 function editDoubles(){const round=state.currentRound,h=state.activeHole,banker=round.bankers[h],d=round.doubles[h];state.doubleSelection=new Set();if(d){if(d.bankerDoubledGroup){state.doubleSelection.add(banker);Object.keys(d.bankerDoubledBack||{}).forEach(i=>{if(d.bankerDoubledBack[i])state.doubleSelection.add(parseInt(i));});}else Object.keys(d.challengerDoubled||{}).forEach(i=>{if(d.challengerDoubled[i])state.doubleSelection.add(parseInt(i));});}state.holePhase='doubles';render();}
-function tieSetPutt(pi,val){if(!state.tieModal.putts)state.tieModal.putts={};state.tieModal.putts[pi]=val===''?null:parseFloat(val);}
+// Longest putt — player tapped directly
+function tieSelectPuttWinner(i){resolveWithWinner(state.tieModal.holeIdx,i);}
+
+// No Long Putt — apply the rules
+function tieNoLongPutt(){
+  const tm=state.tieModal,{holeIdx,prevBanker,prevInTie}=tm;
+  if(prevInTie){
+    // Prior banker was among the tied players — they retain
+    resolveWithWinner(holeIdx,prevBanker);
+  } else {
+    // Prior banker not in the tie — go to tee flip
+    tm.step='flip';tm.flipResult=null;render();
+  }
+}
+
+// Tee flip helpers
 function tieModalFlip(){state.tieModal.flipResult=state.tieModal.tied[Math.floor(Math.random()*state.tieModal.tied.length)];render();}
 function tieFlipSelect(i){state.tieModal.flipResult=i;render();}
-function confirmTiePutts(skip){const tm=state.tieModal,{holeIdx,tied,prevBanker,prevInTie}=tm;if(!skip&&tm.putts){let best=-1,bestIdx=-1;tied.forEach(i=>{const p=tm.putts[i];if(p!=null&&p>best){best=p;bestIdx=i;}});if(bestIdx>=0&&tied.filter(i=>tm.putts[i]===best).length===1){resolveWithWinner(holeIdx,bestIdx);return;}}if(prevInTie)resolveWithWinner(holeIdx,prevBanker);else{tm.step='flip';tm.flipResult=null;render();}}
 function confirmTieFlip(){if(state.tieModal.flipResult===null)return;resolveWithWinner(state.tieModal.holeIdx,state.tieModal.flipResult);}
 function resolveWithWinner(holeIdx,winnerIdx){const round=state.currentRound;if(!round.tieResolution)round.tieResolution={};round.tieResolution[String(holeIdx)]={winner:winnerIdx};round.bankers=computeAllBankers(round);state.tieModal=null;DB.save();render();}
 function setScore(h,i,val){state.currentRound.scores[h][i]=val===''?'':parseInt(val);state.currentRound.bankers=computeAllBankers(state.currentRound);DB.save();clearTimeout(window._st);window._st=setTimeout(render,300);}
