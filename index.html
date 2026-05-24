@@ -892,23 +892,79 @@ function renderScoresPhase(round,h,banker){
         </div>`;
       }).join('')}
     </div>
-    <div class="card" style="padding:0.75rem 0.5rem;">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0.75rem;margin-bottom:0.75rem;"><span class="card-title">Full Scorecard</span><div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;">${Array.from({length:18},(_,i)=>{const has=round.scores[i].some(s=>s!==''&&s!==null),d=round.doubles[i],anyD=d&&(d.bankerDoubledGroup||Object.values(d.challengerDoubled||{}).some(Boolean));return`<button class="btn btn-sm ${i===h?'btn-primary':''}" onclick="jumpToHole(${i})" style="padding:3px 6px;font-size:11px;min-width:28px;${has&&i!==h?'border-color:var(--green);color:var(--green-dark)':''}${anyD&&i!==h?';background:var(--gold-light);border-color:var(--amber)':''}">${i+1}${anyD?'✕':''}</button>`;}).join('')}</div></div>
-      <div class="score-table-wrap"><table class="score-table">
-        <thead>
-          <tr><th>Player</th>${Array.from({length:18},(_,i)=>`<th style="${i===h?'background:#633806':''}">${i+1}</th>`).join('')}<th>Tot</th></tr>
-          ${pars?`<tr style="background:var(--bg-sec)"><td style="font-size:10px;color:var(--text-sec)">Par</td>${Array.from({length:18},(_,i)=>`<td style="font-size:10px;color:var(--text-sec);font-weight:600">${pars[i]}</td>`).join('')}<td style="font-size:10px;color:var(--text-sec);font-weight:600">${pars.reduce((s,v)=>s+v,0)}</td></tr>`:''}
-        </thead>
-        <tbody>
-          ${round.players.map((p,i)=>{const av=avatarColor(i),total=round.scores.reduce((s,hole)=>{const g=hole[i];return s+(g!==''&&g!==null&&!isNaN(parseInt(g))?parseInt(g):0);},0);return`<tr>
-            <td><div style="display:flex;align-items:center;gap:5px;"><div class="player-avatar" style="background:${av.bg};color:${av.color};width:20px;height:20px;font-size:9px">${initials(p.name)}</div><span style="color:var(--text)">${esc(p.name.split(' ')[0])}</span></div></td>
-            ${Array.from({length:18},(_,hh)=>{const g=round.scores[hh][i],net=netScore(g,p.hcp,hh,si),isBank=round.bankers[hh]===i,d=round.doubles[hh],bet=!isBank&&d?getBetAmount(d,i):BASE_BET;return`<td style="${isBank?'background:var(--gold-light)':''}${hh===h?';outline:2px solid var(--green);outline-offset:-2px;border-radius:2px':''}">${g!==''&&g!==null?`<div style="font-weight:${isBank?600:400};color:var(--text)">${g}</div><div class="net-score">${net}${!isBank&&bet>BASE_BET?'<span style="color:var(--amber)">✕</span>':''}</div>`:'<span style="color:var(--border-md)">·</span>'}</td>`;}).join('')}
-            <td style="font-weight:700;color:var(--text)">${total||'—'}</td>
-          </tr>`;}).join('')}
-          <tr style="background:var(--bg-sec)"><td style="font-size:10px;color:var(--text-sec)">Banker</td>${Array.from({length:18},(_,hh)=>{const b=round.bankers[hh],av=avatarColor(b);return`<td><div class="player-avatar" style="background:${av.bg};color:${av.color};width:18px;height:18px;font-size:8px;margin:0 auto">${initials(round.players[b].name)}</div></td>`;}).join('')}<td></td></tr>
-        </tbody>
-      </table></div>
-    </div>`;
+    ${renderScoreTable(round,h,si,pars,0,8,'Front 9')}
+    ${renderScoreTable(round,h,si,pars,9,17,'Back 9')}`;
+}
+
+// ── Scorecard table helper (front or back 9) ─────────────────────────────────
+function renderScoreTable(round,activeHole,si,pars,startH,endH,label){
+  const holes=Array.from({length:endH-startH+1},(_,i)=>startH+i);
+  const isBack=startH===9;
+  // For back 9, also compute front totals for the full total column
+  return`<div class="card" style="padding:0.75rem 0.5rem;overflow:hidden;">
+    <div style="padding:0 0.75rem;margin-bottom:0.75rem;display:flex;align-items:center;justify-content:space-between;">
+      <span class="card-title">${label}</span>
+      <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;">
+        ${holes.map(i=>{const has=round.scores[i].some(s=>s!==''&&s!==null),d=round.doubles[i],anyD=d&&(d.bankerDoubledGroup||Object.values(d.challengerDoubled||{}).some(Boolean));return`<button class="btn btn-sm ${i===activeHole?'btn-primary':''}" onclick="jumpToHole(${i})" style="padding:3px 6px;font-size:11px;min-width:28px;${has&&i!==activeHole?'border-color:var(--green);color:var(--green-dark)':''}${anyD&&i!==activeHole?';background:var(--gold-light);border-color:var(--amber)':''}">${i+1}${anyD?'✕':''}</button>`;}).join('')}
+      </div>
+    </div>
+    <div class="score-table-wrap"><table class="score-table">
+      <thead>
+        <tr>
+          <th>Player</th>
+          ${holes.map(i=>`<th style="${i===activeHole?'background:#633806':''}">${i+1}</th>`).join('')}
+          <th>${label==='Front 9'?'Out':'In'}</th>
+          ${isBack?'<th>Tot</th>':''}
+        </tr>
+        ${pars?`<tr style="background:var(--bg-sec)">
+          <td style="font-size:10px;color:var(--text-sec)">Par</td>
+          ${holes.map(i=>`<td style="font-size:10px;color:var(--text-sec);font-weight:600">${pars[i]}</td>`).join('')}
+          <td style="font-size:10px;color:var(--text-sec);font-weight:600">${holes.reduce((s,i)=>s+pars[i],0)}</td>
+          ${isBack?`<td style="font-size:10px;color:var(--text-sec);font-weight:600">${pars.reduce((s,v)=>s+v,0)}</td>`:''}
+        </tr>`:''}
+      </thead>
+      <tbody>
+        ${round.players.map((p,idx)=>{
+          const av=avatarColor(idx);
+          const nineTotal=holes.reduce((s,hh)=>{const g=round.scores[hh][idx];return s+(g!==''&&g!==null&&!isNaN(parseInt(g))?parseInt(g):0);},0);
+          const fullTotal=round.scores.reduce((s,hole)=>{const g=hole[idx];return s+(g!==''&&g!==null&&!isNaN(parseInt(g))?parseInt(g):0);},0);
+          const frontTotal=isBack?Array.from({length:9},(_,i)=>i).reduce((s,hh)=>{const g=round.scores[hh][idx];return s+(g!==''&&g!==null&&!isNaN(parseInt(g))?parseInt(g):0);},0):0;
+          return`<tr>
+            <td><div style="display:flex;align-items:center;gap:5px;">
+              <div class="player-avatar" style="background:${av.bg};color:${av.color};width:20px;height:20px;font-size:9px">${initials(p.name)}</div>
+              <span style="color:var(--text)">${esc(p.name.split(' ')[0])}</span>
+            </div></td>
+            ${holes.map(hh=>{
+              const g=round.scores[hh][idx];
+              const net=netScore(g,p.hcp,hh,si);
+              const isBank=round.bankers[hh]===idx;
+              const d=round.doubles[hh];
+              const bet=!isBank&&d?getBetAmount(d,idx):BASE_BET;
+              const doubled=!isBank&&bet>BASE_BET;
+              // Banker cell: dark green bg, white text
+              const cellBg=isBank?'background:var(--green-dark)':'';
+              const textColor=isBank?'color:#fff':'color:var(--text)';
+              const netColor=isBank?'color:rgba(255,255,255,0.75)':'';
+              const activeOutline=hh===activeHole?';outline:2px solid var(--amber);outline-offset:-2px;border-radius:2px':'';
+              return`<td style="${cellBg}${activeOutline}">
+                ${g!==''&&g!==null
+                  ?`<div style="font-weight:${isBank?600:400};${textColor}">${g}</div><div class="net-score" style="${netColor}">${net}${doubled?'<span style="color:var(--amber)">✕</span>':''}</div>`
+                  :`<span style="color:var(--border-md)">·</span>`}
+              </td>`;
+            }).join('')}
+            <td style="font-weight:700;color:var(--text)">${nineTotal||'—'}</td>
+            ${isBack?`<td style="font-weight:700;color:var(--text);background:var(--bg-sec)">${fullTotal||'—'}</td>`:''}
+          </tr>`;
+        }).join('')}
+        <tr style="background:var(--bg-sec)">
+          <td style="font-size:10px;color:var(--text-sec)">Banker</td>
+          ${holes.map(hh=>{const b=round.bankers[hh],av=avatarColor(b);return`<td><div class="player-avatar" style="background:${av.bg};color:${av.color};width:18px;height:18px;font-size:8px;margin:0 auto">${initials(round.players[b].name)}</div></td>`;}).join('')}
+          <td></td>
+          ${isBack?'<td></td>':''}
+        </tr>
+      </tbody>
+    </table></div>
+  </div>`;
 }
 
 function renderBets(round){
