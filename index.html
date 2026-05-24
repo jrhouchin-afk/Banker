@@ -634,8 +634,9 @@ function renderDoublesPhase(round,h,banker,allIdxs){
       </button>`;}).join('')}
       ${sel.size>0?`<div style="margin-top:10px;padding:10px 12px;background:var(--bg-sec);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:4px;">${summary.map(s=>`<div style="font-size:14px">${s}</div>`).join('')}</div>`:''}
       <div style="display:flex;gap:8px;margin-top:1.25rem;justify-content:flex-end;">
-        <button class="btn" onclick="confirmDoubles(true)">No doubles</button>
-        <button class="btn btn-primary" onclick="confirmDoubles(false)">${sel.size>0?'Confirm':'No doubles'} <i class="ti ti-arrow-right"></i></button>
+        <button class="btn ${sel.size>0?'btn-primary':''}" onclick="confirmDoubles(false)">
+          ${sel.size>0?'Confirm Doubles':'No Doubles'} <i class="ti ti-arrow-right"></i>
+        </button>
       </div>
     </div>
     <div class="card" style="padding:0.75rem;"><div class="section-label" style="margin-bottom:6px">Jump to hole</div><div style="display:flex;flex-wrap:wrap;gap:4px;">${Array.from({length:18},(_,i)=>{const has=round.scores[i].some(s=>s!==''&&s!==null),d=round.doubles[i],anyD=d&&(d.bankerDoubledGroup||Object.values(d.challengerDoubled||{}).some(Boolean));return`<button class="btn btn-sm ${i===h?'btn-primary':''}" onclick="jumpToHole(${i})" style="min-width:34px;${has&&i!==h?'border-color:var(--green);color:var(--green-dark)':''}${anyD&&i!==h?';background:var(--gold-light);border-color:var(--amber)':''}">${i+1}${anyD?'✕':''}</button>`;}).join('')}</div></div>`;
