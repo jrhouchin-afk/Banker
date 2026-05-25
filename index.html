@@ -785,10 +785,10 @@ function renderFlip(root){
         <p style="font-size:24px;font-weight:700;color:var(--green-dark);margin-bottom:10px;">${esc(players[state.flipResult].name)}</p>
         <span class="badge badge-gold"><i class="ti ti-star"></i> Banker</span>
         <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:1.25rem;">
-          <button class="btn" onclick="spinWheel(${JSON.stringify(players.map(p=>p.name))}, null, 'initial')"><i class="ti ti-refresh"></i> Respin</button>
+          <button class="btn" onclick="flipTee()"><i class="ti ti-refresh"></i> Respin</button>
           <button class="btn btn-primary" onclick="confirmBanker()"><i class="ti ti-check"></i> Confirm & Start</button>
         </div>`:`
-        <button class="btn btn-gold" style="font-size:17px;padding:14px 32px;" onclick="spinWheel(${JSON.stringify(players.map(p=>p.name))}, null, 'initial')">
+        <button class="btn btn-gold" style="font-size:17px;padding:14px 32px;" onclick="flipTee()">
           <i class="ti ti-arrows-shuffle"></i> Spin!
         </button>`}
       <div style="margin-top:1.5rem;border-top:0.5px solid var(--border);padding-top:1rem;">
@@ -899,10 +899,10 @@ function renderScoresPhase(round,h,banker){
             <div class="player-avatar" style="background:${isBank?'rgba(255,255,255,0.2)':av.bg};color:${isBank?'#fff':av.color};width:30px;height:30px;font-size:11px">${initials(p.name)}</div>
             <div><div style="font-size:13px;font-weight:${isBank?600:400};color:${isBank?'#fff':'var(--text)'}">${esc(p.name)}</div><div style="font-size:10px;color:${isBank?'rgba(255,255,255,0.7)':'var(--text-sec)'}">-${strokes}${isBank?'':' · $'+betAmt}</div></div>
           </div>
-          <div style="text-align:center"><input class="hole-input" type="number" min="1" max="20" placeholder="—" value="${gross!==''&&gross!==null?gross:''}" onchange="setScore(${h},${i},this.value)" oninput="setScore(${h},${i},this.value)"/></div>
-          <div style="text-align:center;font-size:15px;font-weight:600;color:${isBank?'#fff':'var(--text)'}">${net!==null?net:'—'}</div>
-          <div style="text-align:center">${resultPill}</div>
-          <div style="text-align:center">${dollarCell}</div>
+          <div style="text-align:center"><input class="hole-input" id="score-input-${i}" type="number" min="1" max="20" placeholder="—" value="${gross!==''&&gross!==null?gross:''}" oninput="setScore(${h},${i},this.value)" inputmode="numeric"/></div>
+          <div id="score-net-${i}" style="text-align:center;font-size:15px;font-weight:600;color:${isBank?'#fff':'var(--text)'}">${net!==null?net:'—'}</div>
+          <div id="score-result-${i}" style="text-align:center">${resultPill}</div>
+          <div id="score-dollar-${i}" style="text-align:center">${dollarCell}</div>
         </div>`;
       }).join('')}
     </div>
@@ -1122,7 +1122,6 @@ function renderTieModal(round,tie){
   if(tm.step==='flip'){
     const done=tm.flipResult!==null;
     const tiedNames=tied.map(i=>round.players[i].name);
-    const tiedNamesJSON=JSON.stringify(tiedNames);
     // After render, draw the wheel
     setTimeout(()=>{
       const cv=document.getElementById('tie-spin-canvas');
@@ -1212,7 +1211,56 @@ function tieFlipSelect(i){
 }
 function confirmTieFlip(){if(state.tieModal.flipResult===null)return;resolveWithWinner(state.tieModal.holeIdx,state.tieModal.flipResult);}
 function resolveWithWinner(holeIdx,winnerIdx){const round=state.currentRound;if(!round.tieResolution)round.tieResolution={};round.tieResolution[String(holeIdx)]={winner:winnerIdx};round.bankers=computeAllBankers(round);state.tieModal=null;DB.save();render();}
-function setScore(h,i,val){state.currentRound.scores[h][i]=val===''?'':parseInt(val);state.currentRound.bankers=computeAllBankers(state.currentRound);DB.save();clearTimeout(window._st);window._st=setTimeout(render,300);}
+function setScore(h,i,val){
+  const round=state.currentRound;
+  round.scores[h][i]=val===''?'':parseInt(val);
+  round.bankers=computeAllBankers(round);
+  DB.save();
+  // Surgically update net/result/dollar cells — no full re-render (keeps keyboard up)
+  updateScoreCells(round,h);
+  // Full re-render only needed once all scores entered (triggers tie check etc.)
+  clearTimeout(window._st);
+  window._st=setTimeout(()=>{
+    const allEntered=round.scores[h].every(s=>s!==''&&s!==null&&!isNaN(parseInt(s)));
+    if(allEntered)render();
+  },400);
+}
+
+function updateScoreCells(round,h){
+  const banker=round.bankers[h];
+  const si=round.strokeIndexes;
+  const doubles=round.doubles[h];
+  round.players.forEach((p,i)=>{
+    const isBank=i===banker;
+    const gross=round.scores[h][i];
+    const net=netScore(gross,p.hcp,h,si);
+    const betAmt=isBank?null:getBetAmount(doubles,i);
+    // Net cell
+    const netEl=document.getElementById('score-net-'+i);
+    if(netEl)netEl.textContent=net!==null?net:'—';
+    // Result + dollar cells
+    const resultEl=document.getElementById('score-result-'+i);
+    const dollarEl=document.getElementById('score-dollar-'+i);
+    if(!resultEl||!dollarEl)return;
+    let resultPill='',dollarCell='';
+    if(isBank){
+      resultPill=`<span class="pill pill-bank">Banker</span>`;
+      const{matchups}=holeMatchups(round,h);
+      const tot=matchups.reduce((s,m)=>m.result==='win'?s-m.betAmt:m.result==='loss'?s+m.betAmt:s,0);
+      if(matchups.some(m=>m.result!=='pending'))
+        dollarCell=`<span style="font-size:13px;font-weight:700;color:${tot>=0?'var(--green)':'var(--red)'}"> ${tot>=0?'+$':'-$'}${Math.abs(tot)}</span>`;
+    } else {
+      const bNet=netScore(round.scores[h][banker],round.players[banker].hcp,h,si);
+      if(net!==null&&bNet!==null){
+        if(net<bNet){resultPill=`<span class="pill pill-win">Win</span>`;dollarCell=`<span style="font-size:13px;font-weight:700;color:var(--green)">+$${betAmt}</span>`;}
+        else if(net>bNet){resultPill=`<span class="pill pill-loss">Loss</span>`;dollarCell=`<span style="font-size:13px;font-weight:700;color:var(--red)">-$${betAmt}</span>`;}
+        else{resultPill=`<span class="pill pill-push">Push</span>`;dollarCell=`<span style="font-size:13px;color:var(--text-sec)">$0</span>`;}
+      }
+    }
+    resultEl.innerHTML=resultPill;
+    dollarEl.innerHTML=dollarCell;
+  });
+}
 function nextHole(){if(state.activeHole<17){state.activeHole++;state.holePhase='doubles';state.doubleSelection=new Set();render();}}
 function jumpToHole(h){state.activeHole=h;const round=state.currentRound;state.holePhase=round.scores[h].some(s=>s!==''&&s!==null)?'scores':'doubles';state.doubleSelection=new Set();render();}
 function setTab(t){state.roundTab=t;render();}
