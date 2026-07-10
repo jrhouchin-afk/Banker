@@ -10,6 +10,8 @@
 <link rel="manifest" href="manifest.json">
 <title>Banker</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f4f0;color:#1a1a18;min-height:100vh;-webkit-tap-highlight-color:transparent;}
@@ -257,11 +259,65 @@ const DB={
   }
 };
 
+// ── Shared course library — Firebase Firestore ──────────────────────────────
+// Courses are synced centrally so everyone using the app sees the same
+// course library. Local storage (above) is kept as an offline-first cache:
+// it's what renders instantly on load, and Firestore updates it in real time
+// whenever it (or a friend) changes.
+const firebaseConfig={
+  apiKey:"AIzaSyA6DHXFcFdGwsjK9ua0RMUTNeNAaAY30OM",
+  authDomain:"banker-c0306.firebaseapp.com",
+  projectId:"banker-c0306",
+  storageBucket:"banker-c0306.firebasestorage.app",
+  messagingSenderId:"384288651192",
+  appId:"1:384288651192:web:9369b0379fe463415a014d"
+};
+let fsdb=null,courseSyncStatus='connecting';
+try{
+  firebase.initializeApp(firebaseConfig);
+  fsdb=firebase.firestore();
+}catch(e){console.warn('Firebase init failed — courses will stay device-local',e);courseSyncStatus='offline';}
+
+function courseDocId(name){return encodeURIComponent(name).replace(/\./g,'%2E');}
+
+function initCourseSync(){
+  if(!fsdb)return;
+  fsdb.collection('courses').onSnapshot(snap=>{
+    const db={};
+    snap.forEach(doc=>{
+      const d=doc.data();
+      if(d&&d.name)db[d.name]={strokeIndexes:d.strokeIndexes,pars:d.pars};
+    });
+    state.courseDB=db;
+    courseSyncStatus='synced';
+    try{localStorage.setItem('gb_courses',JSON.stringify(db));}catch(e){}
+    render();
+  },err=>{
+    console.warn('Course sync error — showing last known local copy',err);
+    courseSyncStatus='offline';
+    render();
+  });
+}
+
+function pushCourseToCloud(name,courseData){
+  if(!fsdb)return;
+  fsdb.collection('courses').doc(courseDocId(name)).set({
+    name,strokeIndexes:courseData.strokeIndexes,pars:courseData.pars,
+    updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(e=>console.warn('Failed to sync course to the cloud — it is saved on this device only for now',e));
+}
+function deleteCourseFromCloud(name){
+  if(!fsdb)return;
+  fsdb.collection('courses').doc(courseDocId(name)).delete()
+    .catch(e=>console.warn('Failed to delete course from the cloud',e));
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 let state={
   view:'home',rounds:[],currentRound:null,courseDB:{},playerDB:[],
   editingCourse:null,newRound:null,
   showAddPlayerForm:false,newPlayerName:'',newPlayerHcp:'',
+  showAddPlayerLib:false,newPlayerLibName:'',
   flipResult:null,activeHole:0,roundTab:'scorecard',
   tieModal:null,holePhase:'doubles',doubleSelection:new Set(),
   _returnToRound:false,
@@ -335,15 +391,18 @@ function renderHome(root){
 function goCourses(){state.view='courses';render();}
 function renderCourses(root){
   const courses=Object.keys(state.courseDB).sort();
+  const syncBadge=courseSyncStatus==='synced'?`<span class="badge badge-green" style="margin-left:6px" title="Course library is synced with everyone"><i class="ti ti-cloud-check"></i> Synced</span>`
+    :courseSyncStatus==='offline'?`<span class="badge" style="margin-left:6px;background:var(--red-light);color:#791F1F" title="Couldn't reach the shared course library — showing this device's last known copy"><i class="ti ti-cloud-off"></i> Offline</span>`
+    :`<span class="badge" style="margin-left:6px;background:#F1EFE8;color:#444441" title="Connecting to the shared course library"><i class="ti ti-loader-2"></i> Connecting</span>`;
   root.innerHTML=`
     <div class="header">
       <button class="btn btn-sm" onclick="goHome()"><i class="ti ti-arrow-left"></i> Back</button>
-      <div style="flex:1"><h1 style="font-size:18px;">Course Library</h1></div>
+      <div style="flex:1"><h1 style="font-size:18px;display:flex;align-items:center;">Course Library${syncBadge}</h1></div>
       <button class="btn btn-primary btn-sm" onclick="startAddCourse()"><i class="ti ti-plus"></i> Add</button>
     </div>
     ${courses.length===0?`<div class="card"><div class="empty-state"><i class="ti ti-map-pin"></i>
       <p style="font-size:16px;font-weight:600;margin-bottom:8px;color:var(--text);">No courses saved</p>
-      <p style="font-size:14px;">Add your home course so stroke indexes are ready on the first tee.</p>
+      <p style="font-size:14px;">Add your home course so stroke indexes are ready on the first tee — it'll sync to everyone using the app.</p>
       <button class="btn btn-primary" style="margin-top:1.5rem" onclick="startAddCourse()"><i class="ti ti-plus"></i> Add First Course</button>
     </div></div>`:`
       <div class="card" style="padding:0;overflow:hidden;">
@@ -378,7 +437,7 @@ function editCourse(name){
   state.view='edit-course';render();
 }
 function deleteCourse(name){
-  if(confirm(`Delete "${name}" from your course library?`)){delete state.courseDB[name];DB.save();render();}
+  if(confirm(`Delete "${name}" from your course library?`)){delete state.courseDB[name];deleteCourseFromCloud(name);DB.save();render();}
 }
 
 function renderEditCourse(root){
@@ -568,7 +627,9 @@ function ecQuickFill(t){
 function saveCourse(){
   const ec=state.editingCourse,name=ec.name.trim();
   if(!name||!siIsValid(ec.strokeIndexes))return;
-  state.courseDB[name]={strokeIndexes:ec.strokeIndexes.map(v=>parseInt(v)),pars:ec.pars?ec.pars.map(v=>parseInt(v)):Array(18).fill(4)};
+  const courseData={strokeIndexes:ec.strokeIndexes.map(v=>parseInt(v)),pars:ec.pars?ec.pars.map(v=>parseInt(v)):Array(18).fill(4)};
+  state.courseDB[name]=courseData;
+  pushCourseToCloud(name,courseData);
   if(state._returnToRound&&state.newRound){state.newRound.course=name;liveInputs.nrCourse=name;}
   state.editingCourse=null;state.view=state._returnToRound?'new-round':'courses';state._returnToRound=false;DB.save();render();
 }
@@ -734,11 +795,25 @@ function renderPlayers(root){
     <div class="header">
       <button class="btn btn-sm" onclick="goHome()"><i class="ti ti-arrow-left"></i> Back</button>
       <div style="flex:1"><h1 style="font-size:18px;">Player Library</h1></div>
+      ${!state.showAddPlayerLib?`<button class="btn btn-primary btn-sm" onclick="showAddPlayerLib()"><i class="ti ti-plus"></i> Add</button>`:''}
+    </div>
+    <div class="card">
+      ${state.showAddPlayerLib?`
+        <div class="section-label">New Player</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="lib-player-name" placeholder="Player name" value="${esc(state.newPlayerLibName)}" oninput="state.newPlayerLibName=this.value" onkeydown="if(event.key==='Enter')addPlayerToLibrary()" autocomplete="off"/>
+          <button class="btn btn-primary btn-sm" onclick="addPlayerToLibrary()"><i class="ti ti-plus"></i> Save</button>
+          <button class="btn btn-sm" onclick="hideAddPlayerLib()">Cancel</button>
+        </div>
+        <p id="lib-player-err" style="font-size:12px;color:var(--red);margin-top:8px;display:none;"></p>
+      `:`
+        <p style="font-size:14px;color:var(--text-sec);">Save a player here so they're ready to pick when you start a new round.</p>
+      `}
     </div>
     ${players.length===0?`<div class="card"><div class="empty-state">
       <i class="ti ti-users" style="font-size:44px;opacity:0.2"></i>
       <p style="font-size:16px;font-weight:600;margin-bottom:8px;color:var(--text);">No saved players</p>
-      <p style="font-size:14px;color:var(--text-sec);">When adding players to a round, check "Save player" to add them here.</p>
+      <p style="font-size:14px;color:var(--text-sec);">Tap "Add" above, or check "Save player" when adding players to a round.</p>
     </div></div>`:`
       <div class="card" style="padding:0;overflow:hidden;">
         <div style="padding:1rem 1.25rem;border-bottom:0.5px solid var(--border);">
@@ -754,6 +829,17 @@ function renderPlayers(root){
         </div>`;}).join('')}
       </div>`}
   `;
+  if(state.showAddPlayerLib){setTimeout(()=>{const el=document.getElementById('lib-player-name');if(el)el.focus();},50);}
+}
+function showAddPlayerLib(){state.showAddPlayerLib=true;state.newPlayerLibName='';render();}
+function hideAddPlayerLib(){state.showAddPlayerLib=false;state.newPlayerLibName='';render();}
+function addPlayerToLibrary(){
+  const name=state.newPlayerLibName.trim();
+  const err=document.getElementById('lib-player-err');
+  if(!name){if(err){err.textContent='Enter a name.';err.style.display='block';}return;}
+  if(state.playerDB.find(p=>p.name.toLowerCase()===name.toLowerCase())){if(err){err.textContent='That player is already saved.';err.style.display='block';}return;}
+  state.playerDB.push({name});DB.save();
+  state.showAddPlayerLib=false;state.newPlayerLibName='';render();
 }
 function deletePlayer(name){
   if(!confirm('Remove '+name+' from your player library?'))return;
@@ -1414,7 +1500,7 @@ function flipTee(){
 }
 
 // Boot
-DB.load();render();
+DB.load();initCourseSync();render();
 </script>
 </body>
 </html>
